@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Listings</title></head>
+  <body>
+    <h1>Listings</h1>
+    <p>Budget: {{ budget }} — Min range: {{ min_range }}</p>
+    {% if cars %}
+      <ul>
+        {% for car in cars %}
+          <li><a href="/car/{{ car.car_id }}">{{ car.model }}</a> — {{ car.price }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No matching cars.</p>
+    {% endif %}
+  </body>
+</html>

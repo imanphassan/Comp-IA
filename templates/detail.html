@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Car Detail</title></head>
+  <body>
+    <h1>{{ car.model }}</h1>
+    <p>Year: {{ car.year }}</p>
+    <p>Price: {{ car.price }}</p>
+    <p>Range: {{ car.range_km }} km</p>
+    <p>Charge time: {{ car.charge_time_min }} min</p>
+    <p>{{ car.description }}</p>
+    <img src="{{ car.image_url }}" alt="car image" style="max-width:300px">
+  </body>
+</html>

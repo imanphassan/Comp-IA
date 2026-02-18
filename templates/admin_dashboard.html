@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Admin Dashboard</title></head>
+  <body>
+    <h1>Admin</h1>
+    <a href="/admin/car/new">Add New Car</a>
+    {% if cars %}
+      <ul>
+        {% for car in cars %}
+          <li>{{ car.model }} — <a href="/admin/car/{{ car.car_id }}/edit">Edit</a></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No cars.</p>
+    {% endif %}
+  </body>
+</html>

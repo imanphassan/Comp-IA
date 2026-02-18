@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Home</title></head>
+  <body>
+    <h1>Home</h1>
+    {% if cars %}
+      <ul>
+        {% for car in cars %}
+          <li><a href="/car/{{ car.car_id }}">{{ car.model }}</a> — {{ car.price }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No cars yet.</p>
+    {% endif %}
+  </body>
+</html>

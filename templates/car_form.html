@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Car Form</title></head>
+  <body>
+    <h1>{% if car %}Edit{% else %}New{% endif %} Car</h1>
+    <form method="post">
+      <label>Model: <input name="model" value="{{ car.model if car else '' }}"></label><br>
+      <label>Year: <input name="year" value="{{ car.year if car else '' }}"></label><br>
+      <label>Price: <input name="price" value="{{ car.price if car else '' }}"></label><br>
+      <label>Range (km): <input name="range_km" value="{{ car.range_km if car else '' }}"></label><br>
+      <label>Charge time (min): <input name="charge_time_min" value="{{ car.charge_time_min if car else '' }}"></label><br>
+      <label>Description: <textarea name="description">{{ car.description if car else '' }}</textarea></label><br>
+      <label>Image URL: <input name="image_url" value="{{ car.image_url if car else '' }}"></label><br>
+      <button type="submit">Save</button>
+    </form>
+    {% if errors %}
+      <ul>
+        {% for k, v in errors.items() %}
+          <li>{{ k }}: {{ v }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </body>
+</html>
