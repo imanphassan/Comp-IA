@@ -67,7 +67,8 @@ Comp-IA/
    python api.py
    ```
 
-   The API will be available at `http://localhost:5001`
+   The API will be available at `http://127.0.0.1:5001`
+   (or whatever link is shown in the terminal)
 
 ### Frontend Setup
 
@@ -86,7 +87,8 @@ Comp-IA/
    npm run dev
    ```
 
-   The app will be available at `http://localhost:5173`
+   The app will be available at `http://localhost:3000`
+   (or whatever link is shown in the terminal)
 
 ## Default Admin Credentials
 
