@@ -1,13 +1,16 @@
+# Database models for the EV Cars application
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+# Admin user model for authentication
 class Admin(db.Model):
     __tablename__ = "admin"
     admin_id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
 
+# Car listing model
 class Car(db.Model):
     __tablename__ = "car"
     car_id = db.Column(db.Integer, primary_key=True)
@@ -19,6 +22,7 @@ class Car(db.Model):
     description = db.Column(db.Text, nullable=False)
     image_url = db.Column(db.Text, nullable=False)
 
+    # Convert model to dictionary for JSON response
     def to_dict(self):
         return {
             "car_id": self.car_id,

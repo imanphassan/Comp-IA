@@ -1,19 +1,22 @@
+// Home page with car listings, search, and filters
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import api from '../api'
 
 export default function Home() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [cars, setCars] = useState([])
-  const [allCars, setAllCars] = useState([])
+  const [cars, setCars] = useState([])        // Filtered cars to display
+  const [allCars, setAllCars] = useState([])  // All cars from API
   const [loading, setLoading] = useState(true)
   
+  // Filter state initialized from URL params
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [budget, setBudget] = useState(searchParams.get('budget') || '')
   const [minRange, setMinRange] = useState(searchParams.get('min_range') || '')
   const [year, setYear] = useState(searchParams.get('year') || '')
   const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'price_asc')
 
+  // Fetch all cars on mount
   useEffect(() => {
     api.get('/cars')
       .then((res) => {
@@ -24,6 +27,7 @@ export default function Home() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Apply filters and sorting whenever filter state changes
   useEffect(() => {
     let filtered = [...allCars]
 
@@ -64,6 +68,7 @@ export default function Home() {
     setCars(filtered)
   }, [allCars, search, budget, minRange, year, sortBy])
 
+  // Reset all filters to default
   const clearFilters = () => {
     setSearch('')
     setBudget('')
@@ -73,6 +78,7 @@ export default function Home() {
     setSearchParams({})
   }
 
+  // Get unique years for dropdown
   const years = [...new Set(allCars.map(car => car.year))].sort((a, b) => b - a)
 
   return (

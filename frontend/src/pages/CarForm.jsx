@@ -1,3 +1,4 @@
+// Form for adding or editing car listings
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -5,7 +6,7 @@ import api from '../api'
 
 export default function CarForm() {
   const { carId } = useParams()
-  const isEdit = Boolean(carId)
+  const isEdit = Boolean(carId)  // Edit mode if carId exists
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
@@ -26,12 +27,14 @@ export default function CarForm() {
   const [loading, setLoading] = useState(isEdit)
   const [submitting, setSubmitting] = useState(false)
 
+  // Redirect to login if not authenticated
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/admin/login')
     }
   }, [user, authLoading, navigate])
 
+  // Load existing car data when editing
   useEffect(() => {
     if (isEdit && user) {
       api.get(`/cars/${carId}`)
@@ -55,6 +58,7 @@ export default function CarForm() {
     }
   }, [carId, isEdit, user, navigate])
 
+  // Update form field and clear error
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -63,6 +67,7 @@ export default function CarForm() {
     }
   }
 
+  // Handle image file selection
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (file) {
@@ -74,6 +79,7 @@ export default function CarForm() {
     }
   }
 
+  // Upload image to server and return URL
   const uploadImage = async () => {
     if (!imageFile) return formData.image_url
     
@@ -92,6 +98,7 @@ export default function CarForm() {
     }
   }
 
+  // Submit form: upload image then save car
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)

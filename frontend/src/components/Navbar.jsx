@@ -1,3 +1,4 @@
+// Navigation bar component with links and auth status
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 

@@ -1,3 +1,4 @@
+// Admin login page
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -10,6 +11,7 @@ export default function AdminLogin() {
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  // Handle login form submission
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')

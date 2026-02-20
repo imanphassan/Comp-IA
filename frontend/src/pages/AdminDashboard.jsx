@@ -1,3 +1,4 @@
+// Admin dashboard for managing car listings
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -9,12 +10,14 @@ export default function AdminDashboard() {
   const [cars, setCars] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // Redirect to login if not authenticated
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/admin/login')
     }
   }, [user, authLoading, navigate])
 
+  // Fetch cars when user is authenticated
   useEffect(() => {
     if (user) {
       api.get('/cars')
@@ -24,6 +27,7 @@ export default function AdminDashboard() {
     }
   }, [user])
 
+  // Delete car with confirmation
   const handleDelete = async (carId) => {
     if (!confirm('Are you sure you want to delete this car?')) return
 

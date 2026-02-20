@@ -1,13 +1,15 @@
+// Car detail page showing full information for a single car
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../api'
 
 export default function CarDetail() {
-  const { carId } = useParams()
+  const { carId } = useParams()  // Get car ID from URL
   const [car, setCar] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Fetch car details on mount
   useEffect(() => {
     api.get(`/cars/${carId}`)
       .then((res) => setCar(res.data))

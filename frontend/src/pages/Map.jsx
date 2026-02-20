@@ -1,7 +1,9 @@
+// Map page showing EV charging stations in Dubai/UAE
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
+// Charging station data
 const stations = [
   { id: 1, name: "DEWA Charging - Dubai Mall", lat: 25.1972, lng: 55.2796, type: "fast", power: "50 kW DC" },
   { id: 2, name: "ADNOC - Sheikh Zayed Road", lat: 25.2285, lng: 55.2842, type: "fast", power: "60 kW DC" },
@@ -15,6 +17,7 @@ const stations = [
   { id: 10, name: "ADNOC - Business Bay", lat: 25.1850, lng: 55.2650, type: "fast", power: "60 kW DC" },
 ]
 
+// Create colored circle marker icon
 const createIcon = (color) => L.divIcon({
   className: 'custom-marker',
   html: `<div style="background:${color};width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
@@ -22,12 +25,14 @@ const createIcon = (color) => L.divIcon({
   iconAnchor: [12, 12],
 })
 
+// Icon colors by charger type
 const icons = {
   fast: createIcon('#ef4444'),
   standard: createIcon('#3b82f6'),
   tesla: createIcon('#a855f7'),
 }
 
+// Display labels for charger types
 const typeLabels = {
   fast: 'Fast Charger',
   standard: 'Standard Charger',

@@ -1,11 +1,13 @@
+// Chatbot page for EV-related questions
 import { useState } from 'react'
 import api from '../api'
 
 export default function Chatbot() {
   const [message, setMessage] = useState('')
-  const [conversation, setConversation] = useState([])
+  const [conversation, setConversation] = useState([])  // Chat history
   const [loading, setLoading] = useState(false)
 
+  // Send message to chatbot API
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!message.trim()) return

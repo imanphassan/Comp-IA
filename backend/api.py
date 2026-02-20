@@ -1,3 +1,4 @@
+# Flask REST API for EV Cars application
 import os
 import uuid
 from functools import wraps
@@ -10,34 +11,41 @@ from werkzeug.utils import secure_filename
 from models import db, Admin, Car
 from chatbot import match_intent
 
+# Allowed image file extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
+# Check if file extension is allowed
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# JWT configuration
 JWT_SECRET = "change_this_in_production"
 JWT_ALGORITHM = "HS256"
 JWT_EXP_HOURS = 24
 
 
+# Create and configure Flask app
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["SECRET_KEY"] = JWT_SECRET
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///ev_site.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     
+    # Configure upload folder for images
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max
 
     CORS(app, supports_credentials=True)
     db.init_app(app)
 
+    # Create tables and seed admin user
     with app.app_context():
         db.create_all()
         seed_admin_if_missing()
 
+    # Decorator to require valid JWT token
     def token_required(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
@@ -55,18 +63,21 @@ def create_app() -> Flask:
             return fn(*args, **kwargs)
         return wrapper
 
+    # Safe integer parsing
     def parse_int(value: str):
         try:
             return int(value)
         except Exception:
             return None
 
+    # Safe float parsing
     def parse_float(value: str):
         try:
             return float(value)
         except Exception:
             return None
 
+    # Validate car form data and return errors dict
     def validate_car_data(data: dict) -> dict:
         errors = {}
         model = (data.get("model") or "").strip()
@@ -253,6 +264,7 @@ def create_app() -> Flask:
     return app
 
 
+# Create default admin user if none exists
 def seed_admin_if_missing():
     existing = Admin.query.filter_by(username="admin").first()
     if existing:
