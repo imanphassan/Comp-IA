@@ -1,47 +1,80 @@
+import re
+import random
 from typing import Dict, List, Tuple
 
-INTENTS: Dict[str, Dict[str, List[str]]] = {
+INTENTS: Dict[str, Dict] = {
     "range": {
-        "keywords": ["range", "km", "kilometre", "kilometer", "distance"],
+        "keywords": {
+            "range": 2, "km": 1, "kilometre": 1, "kilometer": 1, "distance": 1,
+            "how far": 2, "miles": 1,
+        },
         "responses": [
-            "Range depends on battery size, driving style and temperature. If you tell me a model, I can explain what to check.",
-            "For used EVs, ask for real world range and battery health report, not only the brochure number."
+            "Great question! Range depends on battery size, driving style, and temperature. Which model are you looking at?",
+            "Real-world range is usually 10-20% less than the official number. Hot or cold weather can reduce it further.",
+            "I'd recommend checking the car's actual range test results, not just the brochure. Want me to explain what affects range?",
         ],
     },
     "charging": {
-        "keywords": ["charge", "charging", "charger", "fast", "dc", "ac", "minutes"],
+        "keywords": {
+            "charge": 2, "charging": 2, "charger": 2, "fast charge": 3,
+            "dc": 1, "ac": 1, "plug": 1, "kw": 1,
+        },
         "responses": [
-            "Charging time depends on charger type and the car charging curve. Ask whether it supports fast charging and the peak kW.",
-            "A good check is 10 to 80 percent time on a fast charger, plus home charging speed in kW."
+            "Charging speed varies by car and charger type. Most EVs charge from 10-80% in 20-40 minutes on a fast charger.",
+            "Good to know: EVs charge fastest between 20-80%. Outside that range, speed drops to protect the battery.",
+            "Home charging is usually 7-22 kW, while public fast chargers can go up to 150-350 kW. What setup are you considering?",
         ],
     },
     "battery_health": {
-        "keywords": ["battery", "health", "soh", "degradation", "degrade"],
+        "keywords": {
+            "battery": 2, "health": 1, "soh": 3, "degradation": 3, "degrade": 2,
+            "capacity": 2, "warranty": 1,
+        },
         "responses": [
-            "Battery health is key for used EVs. Ask for state of health, service history and charging habits.",
-            "Look for warning signs like big range drops, frequent fast charging and no service records."
+            "Battery health is super important for used EVs! A healthy battery should have 85%+ capacity after 5 years.",
+            "I'd suggest asking the seller for a battery health report. It shows the state of health (SoH) percentage.",
+            "Watch out for batteries with lots of fast charging history—they tend to degrade faster than home-charged ones.",
         ],
     },
     "price": {
-        "keywords": ["price", "cost", "budget", "aed", "dirham"],
+        "keywords": {
+            "price": 2, "cost": 2, "budget": 2, "aed": 1, "dirham": 1,
+            "cheap": 1, "expensive": 1, "afford": 2,
+        },
         "responses": [
-            "If you share your budget, I can suggest what to prioritise, like range, year or charging speed.",
-            "Used EV prices vary with battery health, warranty and mileage. Those are the 3 checks to do first."
+            "What's your budget? I can help you figure out what to prioritise—range, newer model, or better battery.",
+            "Used EV prices depend on battery health, warranty status, and mileage. Those are the big three to check!",
+            "A lower price might mean older battery tech. It's worth balancing upfront cost against long-term value.",
         ],
     },
 }
 
-FALLBACK_CATEGORIES: List[str] = ["range", "charging", "battery health"]
+FALLBACK_CATEGORIES: List[str] = ["range", "charging", "battery health", "price"]
 
 def normalise(text: str) -> str:
     return " ".join(text.lower().strip().split())
 
+def _word_match(keyword: str, text: str) -> bool:
+    pattern = r'\b' + re.escape(keyword) + r'\b'
+    return bool(re.search(pattern, text))
+
 def match_intent(message: str) -> Tuple[str, str]:
     msg = normalise(message)
+    scores: Dict[str, int] = {}
+    
     for intent, data in INTENTS.items():
-        for kw in data["keywords"]:
-            if kw in msg:
-                return intent, data["responses"][0]
+        score = 0
+        for kw, weight in data["keywords"].items():
+            if _word_match(kw, msg):
+                score += weight
+        if score > 0:
+            scores[intent] = score
+    
+    if scores:
+        best_intent = max(scores, key=scores.get)
+        responses = INTENTS[best_intent]["responses"]
+        return best_intent, random.choice(responses)
+    
     fallback = (
         "I did not understand that. You can ask about "
         + ", ".join(FALLBACK_CATEGORIES)

@@ -1,7 +1,6 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Home from './pages/Home'
-import Listings from './pages/Listings'
 import CarDetail from './pages/CarDetail'
 import Map from './pages/Map'
 import Chatbot from './pages/Chatbot'
@@ -16,7 +15,7 @@ export default function App() {
       <main className="container mx-auto p-4">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/listings" element={<Listings />} />
+          <Route path="/listings" element={<Navigate to="/" replace />} />
           <Route path="/car/:carId" element={<CarDetail />} />
           <Route path="/map" element={<Map />} />
           <Route path="/chatbot" element={<Chatbot />} />

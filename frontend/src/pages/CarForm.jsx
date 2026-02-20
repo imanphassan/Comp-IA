@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
@@ -8,6 +8,7 @@ export default function CarForm() {
   const isEdit = Boolean(carId)
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const fileInputRef = useRef(null)
 
   const [formData, setFormData] = useState({
     model: '',
@@ -18,6 +19,9 @@ export default function CarForm() {
     description: '',
     image_url: '',
   })
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [uploading, setUploading] = useState(false)
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(isEdit)
   const [submitting, setSubmitting] = useState(false)
@@ -59,22 +63,59 @@ export default function CarForm() {
     }
   }
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      setImageFile(file)
+      setImagePreview(URL.createObjectURL(file))
+      if (errors.image_url) {
+        setErrors((prev) => ({ ...prev, image_url: null }))
+      }
+    }
+  }
+
+  const uploadImage = async () => {
+    if (!imageFile) return formData.image_url
+    
+    setUploading(true)
+    try {
+      const uploadData = new FormData()
+      uploadData.append('file', imageFile)
+      const res = await api.post('/upload', uploadData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      return res.data.image_url
+    } catch (err) {
+      throw new Error(err.response?.data?.error || 'Failed to upload image')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
     setErrors({})
 
-    const payload = {
-      model: formData.model,
-      year: parseInt(formData.year, 10),
-      price: parseFloat(formData.price),
-      range_km: parseInt(formData.range_km, 10),
-      charge_time_min: parseInt(formData.charge_time_min, 10),
-      description: formData.description,
-      image_url: formData.image_url,
-    }
-
     try {
+      const imageUrl = await uploadImage()
+      
+      if (!imageUrl) {
+        setErrors({ image_url: 'Image is required.' })
+        setSubmitting(false)
+        return
+      }
+
+      const payload = {
+        model: formData.model,
+        year: parseInt(formData.year, 10),
+        price: parseFloat(formData.price),
+        range_km: parseInt(formData.range_km, 10),
+        charge_time_min: parseInt(formData.charge_time_min, 10),
+        description: formData.description,
+        image_url: imageUrl,
+      }
+
       if (isEdit) {
         await api.put(`/cars/${carId}`, payload)
       } else {
@@ -85,7 +126,7 @@ export default function CarForm() {
       if (err.response?.data?.errors) {
         setErrors(err.response.data.errors)
       } else {
-        alert(err.response?.data?.error || 'Failed to save car')
+        alert(err.message || err.response?.data?.error || 'Failed to save car')
       }
     } finally {
       setSubmitting(false)
@@ -178,14 +219,36 @@ export default function CarForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Car Image</label>
           <input
-            type="text"
-            name="image_url"
-            value={formData.image_url}
-            onChange={handleChange}
-            className={`w-full rounded border p-3 ${errors.image_url ? 'border-red-500' : 'border-gray-300'}`}
+            type="file"
+            ref={fileInputRef}
+            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+            onChange={handleFileChange}
+            className="hidden"
           />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className={`w-full rounded border-2 border-dashed p-6 text-center cursor-pointer hover:bg-gray-50 transition ${errors.image_url ? 'border-red-500' : 'border-gray-300'}`}
+          >
+            {imagePreview || formData.image_url ? (
+              <div className="space-y-2">
+                <img
+                  src={imagePreview || (formData.image_url.startsWith('/api') ? `http://localhost:5001${formData.image_url}` : formData.image_url)}
+                  alt="Preview"
+                  className="max-h-48 mx-auto rounded"
+                />
+                <p className="text-sm text-gray-500">Click to change image</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-4xl text-gray-400">📷</div>
+                <p className="text-gray-600">Click to upload an image</p>
+                <p className="text-sm text-gray-400">PNG, JPG, GIF, WebP (max 16MB)</p>
+              </div>
+            )}
+          </div>
+          {uploading && <p className="text-blue-500 text-sm mt-1">Uploading image...</p>}
           {errors.image_url && <p className="text-red-500 text-sm mt-1">{errors.image_url}</p>}
         </div>
 

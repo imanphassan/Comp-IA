@@ -1,11 +1,19 @@
+import os
+import uuid
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 import jwt
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from models import db, Admin, Car
 from chatbot import match_intent
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 JWT_SECRET = "change_this_in_production"
 JWT_ALGORITHM = "HS256"
@@ -17,6 +25,11 @@ def create_app() -> Flask:
     app.config["SECRET_KEY"] = JWT_SECRET
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///ev_site.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
     CORS(app, supports_credentials=True)
     db.init_app(app)
@@ -196,6 +209,35 @@ def create_app() -> Flask:
         db.session.delete(car)
         db.session.commit()
         return jsonify({"message": "Car deleted"})
+
+    # ─────────────────────────────────────────────────────────────
+    # FILE UPLOAD ENDPOINT
+    # ─────────────────────────────────────────────────────────────
+
+    @app.post("/api/upload")
+    @token_required
+    def api_upload():
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({"error": "File type not allowed. Use: png, jpg, jpeg, gif, webp"}), 400
+        
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(filepath)
+        
+        image_url = f"/api/uploads/{filename}"
+        return jsonify({"image_url": image_url})
+
+    @app.get("/api/uploads/<filename>")
+    def api_serve_upload(filename):
+        return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
     # ─────────────────────────────────────────────────────────────
     # CHATBOT ENDPOINT
