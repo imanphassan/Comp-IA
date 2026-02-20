@@ -1,15 +1,29 @@
 <!doctype html>
 <html>
-  <head><meta charset="utf-8"><title>Chatbot</title></head>
-  <body>
-    <h1>Chatbot</h1>
-    <form method="post">
-      <textarea name="message" rows="3" cols="50">{{ message }}</textarea><br>
-      <button type="submit">Send</button>
-    </form>
-    {% if reply %}
-      <h2>Reply</h2>
-      <p>{{ reply }}</p>
-    {% endif %}
-  </body>
+
+<head>
+  <meta charset="utf-8">
+  <title>Chatbot</title>
+</head>
+
+<body>
+  <nav>
+    <a href="/">Home</a> |
+    <a href="/listings">Listings</a> |
+    <a href="/map">Map</a> |
+    <a href="/chatbot">Chatbot</a> |
+    <a href="/admin">Admin</a>
+  </nav>
+  <hr>
+  <h1>Chatbot</h1>
+  <form method="post">
+    <textarea name="message" rows="3" cols="50">{{ message }}</textarea><br>
+    <button type="submit">Send</button>
+  </form>
+  {% if reply %}
+  <h2>Reply</h2>
+  <p>{{ reply }}</p>
+  {% endif %}
+</body>
+
 </html>

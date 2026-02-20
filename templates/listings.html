@@ -1,17 +1,31 @@
 <!doctype html>
 <html>
-  <head><meta charset="utf-8"><title>Listings</title></head>
-  <body>
-    <h1>Listings</h1>
-    <p>Budget: {{ budget }} — Min range: {{ min_range }}</p>
-    {% if cars %}
-      <ul>
-        {% for car in cars %}
-          <li><a href="/car/{{ car.car_id }}">{{ car.model }}</a> — {{ car.price }}</li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p>No matching cars.</p>
-    {% endif %}
-  </body>
+
+<head>
+  <meta charset="utf-8">
+  <title>Listings</title>
+</head>
+
+<body>
+  <nav>
+    <a href="/">Home</a> |
+    <a href="/listings">Listings</a> |
+    <a href="/map">Map</a> |
+    <a href="/chatbot">Chatbot</a> |
+    <a href="/admin">Admin</a>
+  </nav>
+  <hr>
+  <h1>Listings</h1>
+  <p>Budget: {{ budget }} — Min range: {{ min_range }}</p>
+  {% if cars %}
+  <ul>
+    {% for car in cars %}
+    <li><a href="/car/{{ car.car_id }}">{{ car.model }}</a> — {{ car.price }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No matching cars.</p>
+  {% endif %}
+</body>
+
 </html>

@@ -1,8 +1,162 @@
 <!doctype html>
 <html>
-  <head><meta charset="utf-8"><title>Map</title></head>
-  <body>
-    <h1>Map</h1>
-    <p>Placeholder map page.</p>
-  </body>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EV Charging Stations</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    nav {
+      background: #2c3e50;
+      padding: 12px 20px;
+    }
+
+    nav a {
+      color: #ecf0f1;
+      text-decoration: none;
+      margin-right: 20px;
+    }
+
+    nav a:hover {
+      color: #3498db;
+    }
+
+    .container {
+      padding: 20px;
+    }
+
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+
+    p.subtitle {
+      color: #7f8c8d;
+      margin-bottom: 20px;
+    }
+
+    #map {
+      height: 500px;
+      width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .legend {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      display: inline-block;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 5px 0;
+    }
+
+    .legend-icon {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .fast {
+      background: #e74c3c;
+    }
+
+    .standard {
+      background: #3498db;
+    }
+
+    .tesla {
+      background: #9b59b6;
+    }
+  </style>
+</head>
+
+<body>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/listings">Listings</a>
+    <a href="/map">Map</a>
+    <a href="/chatbot">Chatbot</a>
+    <a href="/admin">Admin</a>
+  </nav>
+
+  <div class="container">
+    <h1>EV Charging Stations</h1>
+    <p class="subtitle">Find charging stations across the UAE</p>
+
+    <div id="map"></div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-icon fast"></span> Fast Charger (DC 50kW+)</div>
+      <div class="legend-item"><span class="legend-icon standard"></span> Standard Charger (AC 7-22kW)</div>
+      <div class="legend-item"><span class="legend-icon tesla"></span> Tesla Supercharger</div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([25.2048, 55.2708], 11);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const stations = [
+      { name: "DEWA Charging - Dubai Mall", lat: 25.1972, lng: 55.2796, type: "fast", power: "50 kW DC" },
+      { name: "ADNOC - Sheikh Zayed Road", lat: 25.2285, lng: 55.2842, type: "fast", power: "60 kW DC" },
+      { name: "Mall of the Emirates", lat: 25.1181, lng: 55.2006, type: "standard", power: "22 kW AC" },
+      { name: "Tesla Supercharger - Marina", lat: 25.0805, lng: 55.1403, type: "tesla", power: "150 kW DC" },
+      { name: "ENOC - Al Barsha", lat: 25.1134, lng: 55.1943, type: "fast", power: "50 kW DC" },
+      { name: "Dubai Festival City", lat: 25.2227, lng: 55.3530, type: "standard", power: "11 kW AC" },
+      { name: "DEWA - Jumeirah Beach", lat: 25.1425, lng: 55.1857, type: "fast", power: "50 kW DC" },
+      { name: "Tesla Supercharger - Downtown", lat: 25.1864, lng: 55.2636, type: "tesla", power: "250 kW DC" },
+      { name: "City Centre Deira", lat: 25.2520, lng: 55.3318, type: "standard", power: "7 kW AC" },
+      { name: "ADNOC - Business Bay", lat: 25.1850, lng: 55.2650, type: "fast", power: "60 kW DC" },
+    ];
+
+    const icons = {
+      fast: L.divIcon({
+        className: 'custom-marker',
+        html: '<div style="background:#e74c3c;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      }),
+      standard: L.divIcon({
+        className: 'custom-marker',
+        html: '<div style="background:#3498db;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      }),
+      tesla: L.divIcon({
+        className: 'custom-marker',
+        html: '<div style="background:#9b59b6;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      })
+    };
+
+    stations.forEach(station => {
+      const marker = L.marker([station.lat, station.lng], { icon: icons[station.type] }).addTo(map);
+      marker.bindPopup(`
+        <strong>${station.name}</strong><br>
+        <span style="color:#7f8c8d;">Type:</span> ${station.type === 'tesla' ? 'Tesla Supercharger' : station.type === 'fast' ? 'Fast Charger' : 'Standard Charger'}<br>
+        <span style="color:#7f8c8d;">Power:</span> ${station.power}
+      `);
+    });
+  </script>
+</body>
+
 </html>

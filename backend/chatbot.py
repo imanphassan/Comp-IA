@@ -1,5 +1,7 @@
+# Chatbot for answering EV-related questions
 from typing import Dict, List, Tuple
 
+# Intent definitions with keywords and responses
 INTENTS: Dict[str, Dict[str, List[str]]] = {
     "range": {
         "keywords": ["range", "km", "kilometre", "kilometer", "distance"],
@@ -31,11 +33,14 @@ INTENTS: Dict[str, Dict[str, List[str]]] = {
     },
 }
 
+# Topics shown in fallback message
 FALLBACK_CATEGORIES: List[str] = ["range", "charging", "battery health"]
 
+# Normalize text: lowercase and remove extra whitespace
 def normalise(text: str) -> str:
     return " ".join(text.lower().strip().split())
 
+# Match user message to intent and return response
 def match_intent(message: str) -> Tuple[str, str]:
     msg = normalise(message)
     for intent, data in INTENTS.items():

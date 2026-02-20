@@ -1,0 +1,281 @@
+// Form for adding or editing car listings
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import api from '../api'
+
+export default function CarForm() {
+  const { carId } = useParams()
+  const isEdit = Boolean(carId)  // Edit mode if carId exists
+  const { user, loading: authLoading } = useAuth()
+  const navigate = useNavigate()
+  const fileInputRef = useRef(null)
+
+  const [formData, setFormData] = useState({
+    model: '',
+    year: '',
+    price: '',
+    range_km: '',
+    charge_time_min: '',
+    description: '',
+    image_url: '',
+  })
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [errors, setErrors] = useState({})
+  const [loading, setLoading] = useState(isEdit)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/admin/login')
+    }
+  }, [user, authLoading, navigate])
+
+  // Load existing car data when editing
+  useEffect(() => {
+    if (isEdit && user) {
+      api.get(`/cars/${carId}`)
+        .then((res) => {
+          const car = res.data
+          setFormData({
+            model: car.model,
+            year: car.year.toString(),
+            price: car.price.toString(),
+            range_km: car.range_km.toString(),
+            charge_time_min: car.charge_time_min.toString(),
+            description: car.description,
+            image_url: car.image_url,
+          })
+        })
+        .catch((err) => {
+          alert(err.response?.data?.error || 'Failed to load car')
+          navigate('/admin')
+        })
+        .finally(() => setLoading(false))
+    }
+  }, [carId, isEdit, user, navigate])
+
+  // Update form field and clear error
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: null }))
+    }
+  }
+
+  // Handle image file selection
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      setImageFile(file)
+      setImagePreview(URL.createObjectURL(file))
+      if (errors.image_url) {
+        setErrors((prev) => ({ ...prev, image_url: null }))
+      }
+    }
+  }
+
+  // Upload image to server and return URL
+  const uploadImage = async () => {
+    if (!imageFile) return formData.image_url
+    
+    setUploading(true)
+    try {
+      const uploadData = new FormData()
+      uploadData.append('file', imageFile)
+      const res = await api.post('/upload', uploadData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      return res.data.image_url
+    } catch (err) {
+      throw new Error(err.response?.data?.error || 'Failed to upload image')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // Submit form: upload image then save car
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setErrors({})
+
+    try {
+      const imageUrl = await uploadImage()
+      
+      if (!imageUrl) {
+        setErrors({ image_url: 'Image is required.' })
+        setSubmitting(false)
+        return
+      }
+
+      const payload = {
+        model: formData.model,
+        year: parseInt(formData.year, 10),
+        price: parseFloat(formData.price),
+        range_km: parseInt(formData.range_km, 10),
+        charge_time_min: parseInt(formData.charge_time_min, 10),
+        description: formData.description,
+        image_url: imageUrl,
+      }
+
+      if (isEdit) {
+        await api.put(`/cars/${carId}`, payload)
+      } else {
+        await api.post('/cars', payload)
+      }
+      navigate('/admin')
+    } catch (err) {
+      if (err.response?.data?.errors) {
+        setErrors(err.response.data.errors)
+      } else {
+        alert(err.message || err.response?.data?.error || 'Failed to save car')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (authLoading || !user || loading) {
+    return <p className="text-center py-8">Loading...</p>
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">
+        {isEdit ? 'Edit Car' : 'Add New Car'}
+      </h1>
+
+      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+          <input
+            type="text"
+            name="model"
+            value={formData.model}
+            onChange={handleChange}
+            className={`w-full rounded border p-3 ${errors.model ? 'border-red-500' : 'border-gray-300'}`}
+          />
+          {errors.model && <p className="text-red-500 text-sm mt-1">{errors.model}</p>}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+            <input
+              type="number"
+              name="year"
+              value={formData.year}
+              onChange={handleChange}
+              className={`w-full rounded border p-3 ${errors.year ? 'border-red-500' : 'border-gray-300'}`}
+            />
+            {errors.year && <p className="text-red-500 text-sm mt-1">{errors.year}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Price (AED)</label>
+            <input
+              type="number"
+              name="price"
+              value={formData.price}
+              onChange={handleChange}
+              className={`w-full rounded border p-3 ${errors.price ? 'border-red-500' : 'border-gray-300'}`}
+            />
+            {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Range (km)</label>
+            <input
+              type="number"
+              name="range_km"
+              value={formData.range_km}
+              onChange={handleChange}
+              className={`w-full rounded border p-3 ${errors.range_km ? 'border-red-500' : 'border-gray-300'}`}
+            />
+            {errors.range_km && <p className="text-red-500 text-sm mt-1">{errors.range_km}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Charge Time (min)</label>
+            <input
+              type="number"
+              name="charge_time_min"
+              value={formData.charge_time_min}
+              onChange={handleChange}
+              className={`w-full rounded border p-3 ${errors.charge_time_min ? 'border-red-500' : 'border-gray-300'}`}
+            />
+            {errors.charge_time_min && <p className="text-red-500 text-sm mt-1">{errors.charge_time_min}</p>}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            rows={4}
+            className={`w-full rounded border p-3 ${errors.description ? 'border-red-500' : 'border-gray-300'}`}
+          />
+          {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Car Image</label>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className={`w-full rounded border-2 border-dashed p-6 text-center cursor-pointer hover:bg-gray-50 transition ${errors.image_url ? 'border-red-500' : 'border-gray-300'}`}
+          >
+            {imagePreview || formData.image_url ? (
+              <div className="space-y-2">
+                <img
+                  src={imagePreview || (formData.image_url.startsWith('/api') ? `http://localhost:5001${formData.image_url}` : formData.image_url)}
+                  alt="Preview"
+                  className="max-h-48 mx-auto rounded"
+                />
+                <p className="text-sm text-gray-500">Click to change image</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-4xl text-gray-400">📷</div>
+                <p className="text-gray-600">Click to upload an image</p>
+                <p className="text-sm text-gray-400">PNG, JPG, GIF, WebP (max 16MB)</p>
+              </div>
+            )}
+          </div>
+          {uploading && <p className="text-blue-500 text-sm mt-1">Uploading image...</p>}
+          {errors.image_url && <p className="text-red-500 text-sm mt-1">{errors.image_url}</p>}
+        </div>
+
+        <div className="flex gap-4 pt-4">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 disabled:opacity-50"
+          >
+            {submitting ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="bg-gray-300 text-gray-700 px-6 py-3 rounded hover:bg-gray-400"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
