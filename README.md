@@ -4,11 +4,21 @@ A web application for browsing and managing used electric vehicle listings in th
 
 ## Features
 
+### Customer Features
 - **Browse Listings** – Search, filter, and sort electric vehicles by model, price, range, and year
 - **Car Details** – View detailed information about each vehicle
+- **My Garage** – Save cars for later (syncs across devices when logged in)
+- **Show Interest** – Submit interest forms for cars you like
+- **Book Test Drives** – Schedule appointments with available time slots
 - **Charging Station Map** – Interactive map showing EV charging stations across Dubai/UAE
 - **EV Advisor Chatbot** – Get answers to common EV questions about range, charging, battery health, and pricing
+
+### Admin Features
 - **Admin Dashboard** – Add, edit, and delete car listings (protected by authentication)
+- **Mark Cars as Sold** – Track sales with final sale price
+- **Revenue Analytics** – View sales charts and revenue over time
+- **Lead Management** – View and manage customer interest submissions
+- **Appointment Management** – View and manage scheduled test drives
 - **Image Upload** – Upload car images directly instead of using URLs
 
 ## Tech Stack
@@ -62,7 +72,13 @@ Comp-IA/
    pip install -r requirements.txt
    ```
 
-4. Run the backend server:
+4. **(First time or after model changes)** Delete the old database to apply schema changes:
+   ```bash
+   rm instance/ev_site.db
+   ```
+   > **Note:** This will delete all existing data. The database will be recreated automatically when you start the server.
+
+5. Run the backend server:
    ```bash
    python api.py
    ```
@@ -90,23 +106,54 @@ Comp-IA/
    The app will be available at `http://localhost:3000`
    (or whatever link is shown in the terminal)
 
-## Default Admin Credentials
+## Default Credentials
 
+### Admin
 - **Username:** `admin`
 - **Password:** `admin123`
 
+### Customer
+Customers can register their own accounts via the Register page.
+
 ## API Endpoints
 
+### Admin Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/auth/login` | Admin login |
-| GET | `/api/auth/me` | Get current user |
+| GET | `/api/auth/me` | Get current admin |
 | GET | `/api/cars` | List all cars (with optional filters) |
+| POST | `/api/cars` | Create car (admin auth) |
+| PUT | `/api/cars/:id` | Update car (admin auth) |
+| DELETE | `/api/cars/:id` | Delete car (admin auth) |
+| POST | `/api/cars/:id/sell` | Mark car as sold (admin auth) |
+| POST | `/api/upload` | Upload image (admin auth) |
+| GET | `/api/analytics/summary` | Get sales summary (admin auth) |
+| GET | `/api/analytics/sales-by-model` | Get sales by model (admin auth) |
+| GET | `/api/analytics/revenue-over-time` | Get revenue trends (admin auth) |
+| GET | `/api/leads` | List all leads (admin auth) |
+| DELETE | `/api/leads/:id` | Delete lead (admin auth) |
+| GET | `/api/appointments` | List all appointments (admin auth) |
+| PUT | `/api/appointments/:id/status` | Update appointment status (admin auth) |
+
+### Customer Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/customer/register` | Register new customer |
+| POST | `/api/customer/login` | Customer login |
+| GET | `/api/customer/me` | Get current customer |
+| GET | `/api/customer/garage` | Get saved cars (customer auth) |
+| POST | `/api/customer/garage/:car_id` | Save car to garage (customer auth) |
+| DELETE | `/api/customer/garage/:car_id` | Remove car from garage (customer auth) |
+
+### Public Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cars` | List all cars |
 | GET | `/api/cars/:id` | Get car details |
-| POST | `/api/cars` | Create car (auth required) |
-| PUT | `/api/cars/:id` | Update car (auth required) |
-| DELETE | `/api/cars/:id` | Delete car (auth required) |
-| POST | `/api/upload` | Upload image (auth required) |
+| POST | `/api/leads` | Submit interest form |
+| GET | `/api/appointments/available-slots` | Get available time slots |
+| POST | `/api/appointments` | Book appointment |
 | POST | `/api/chatbot` | Send message to chatbot |
 
 ## License

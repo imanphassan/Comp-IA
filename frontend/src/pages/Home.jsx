@@ -1,36 +1,81 @@
-// Home page with car listings, search, and filters
+// ═══════════════════════════════════════════════════════════════════════════════
+// Home Page - Car Listings with Search and Filters
+// ═══════════════════════════════════════════════════════════════════════════════
+// This is the main landing page of the EV Cars marketplace.
+// It displays all car listings with real-time filtering and sorting.
+//
+// Features:
+//   - Search by model name
+//   - Filter by maximum budget (price)
+//   - Filter by minimum range (km)
+//   - Filter by year
+//   - Sort by price, year, or range
+//   - Client-side filtering for instant results
+// ═══════════════════════════════════════════════════════════════════════════════
+
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import api from '../api'
 
 export default function Home() {
+  // ─────────────────────────────────────────────────────────────────────────
+  // URL SEARCH PARAMS
+  // ─────────────────────────────────────────────────────────────────────────
+  // useSearchParams allows reading/writing URL query parameters.
+  // This enables filter state to be preserved in the URL.
   const [searchParams, setSearchParams] = useSearchParams()
+  
+  // ─────────────────────────────────────────────────────────────────────────
+  // STATE MANAGEMENT
+  // ─────────────────────────────────────────────────────────────────────────
+  // cars: Currently displayed cars after filtering
+  // allCars: Complete list from API (used as source for filtering)
+  // loading: Shows loading state while fetching data
   const [cars, setCars] = useState([])        // Filtered cars to display
   const [allCars, setAllCars] = useState([])  // All cars from API
   const [loading, setLoading] = useState(true)
   
-  // Filter state initialized from URL params
+  // ─────────────────────────────────────────────────────────────────────────
+  // FILTER STATE
+  // ─────────────────────────────────────────────────────────────────────────
+  // Each filter is initialized from URL params if present.
+  // This allows users to bookmark or share filtered views.
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [budget, setBudget] = useState(searchParams.get('budget') || '')
   const [minRange, setMinRange] = useState(searchParams.get('min_range') || '')
   const [year, setYear] = useState(searchParams.get('year') || '')
   const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'price_asc')
 
-  // Fetch all cars on mount
+  // ─────────────────────────────────────────────────────────────────────────
+  // DATA FETCHING
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fetch all cars from the API when the component mounts.
+  // We fetch all cars once and filter client-side for instant results.
   useEffect(() => {
     api.get('/cars')
       .then((res) => {
-        setAllCars(res.data)
-        setCars(res.data)
+        setAllCars(res.data)  // Store complete list for filtering
+        setCars(res.data)     // Initially show all cars
       })
       .catch((err) => console.error(err))
       .finally(() => setLoading(false))
-  }, [])
+  }, [])  // Empty array = run once on mount
 
-  // Apply filters and sorting whenever filter state changes
+  // ─────────────────────────────────────────────────────────────────────────
+  // CLIENT-SIDE FILTERING AND SORTING
+  // ─────────────────────────────────────────────────────────────────────────
+  // This effect runs whenever any filter value changes.
+  // It applies all active filters to the complete car list and sorts results.
+  //
+  // Benefits of client-side filtering:
+  // - Instant feedback without API calls
+  // - Reduces server load
+  // - Works offline after initial load
   useEffect(() => {
+    // Start with a copy of all cars (spread operator creates new array)
     let filtered = [...allCars]
 
+    // SEARCH FILTER: Match model name (case-insensitive)
     if (search) {
       const searchLower = search.toLowerCase()
       filtered = filtered.filter(car => 
@@ -38,47 +83,61 @@ export default function Home() {
       )
     }
 
+    // BUDGET FILTER: Only show cars at or below budget
     if (budget) {
       filtered = filtered.filter(car => car.price <= parseFloat(budget))
     }
 
+    // RANGE FILTER: Only show cars with at least this range
     if (minRange) {
       filtered = filtered.filter(car => car.range_km >= parseInt(minRange))
     }
 
+    // YEAR FILTER: Exact year match
     if (year) {
       filtered = filtered.filter(car => car.year === parseInt(year))
     }
 
+    // SORTING: Apply selected sort order
+    // Array.sort() modifies in place, comparing pairs of elements
     switch (sortBy) {
       case 'price_asc':
-        filtered.sort((a, b) => a.price - b.price)
+        filtered.sort((a, b) => a.price - b.price)  // Lowest price first
         break
       case 'price_desc':
-        filtered.sort((a, b) => b.price - a.price)
+        filtered.sort((a, b) => b.price - a.price)  // Highest price first
         break
       case 'year_desc':
-        filtered.sort((a, b) => b.year - a.year)
+        filtered.sort((a, b) => b.year - a.year)    // Newest first
         break
       case 'range_desc':
-        filtered.sort((a, b) => b.range_km - a.range_km)
+        filtered.sort((a, b) => b.range_km - a.range_km)  // Longest range first
         break
     }
 
+    // Update displayed cars with filtered/sorted results
     setCars(filtered)
-  }, [allCars, search, budget, minRange, year, sortBy])
+  }, [allCars, search, budget, minRange, year, sortBy])  // Re-run when any dependency changes
 
-  // Reset all filters to default
+  // ─────────────────────────────────────────────────────────────────────────
+  // CLEAR FILTERS
+  // ─────────────────────────────────────────────────────────────────────────
+  // Reset all filter values to their defaults.
+  // Also clears URL parameters.
   const clearFilters = () => {
     setSearch('')
     setBudget('')
     setMinRange('')
     setYear('')
     setSortBy('price_asc')
-    setSearchParams({})
+    setSearchParams({})  // Clear URL query string
   }
 
-  // Get unique years for dropdown
+  // ─────────────────────────────────────────────────────────────────────────
+  // DYNAMIC YEAR OPTIONS
+  // ─────────────────────────────────────────────────────────────────────────
+  // Extract unique years from car data for the year filter dropdown.
+  // Set ensures uniqueness, spread converts back to array for sorting.
   const years = [...new Set(allCars.map(car => car.year))].sort((a, b) => b - a)
 
   return (

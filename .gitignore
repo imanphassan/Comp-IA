@@ -9,6 +9,10 @@ instance/
 frontend/node_modules/
 frontend/dist/
 
+# Vite
+.vite/
+*.local
+
 # IDE
 .vscode/
 .idea/
