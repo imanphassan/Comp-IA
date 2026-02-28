@@ -111,9 +111,24 @@ Comp-IA/
 ### Admin
 - **Username:** `admin`
 - **Password:** `admin123`
+- **Access:** Navigate to `/admin/login` or click "Admin Login" on the customer login page
 
 ### Customer
-Customers can register their own accounts via the Register page.
+Customers can register their own accounts via the Register page (`/register`).
+
+## Accessing the Admin Panel
+
+1. Go to `http://localhost:3000/admin/login`
+2. Enter the default credentials:
+   - Username: `admin`
+   - Password: `admin123`
+3. You will be redirected to the Admin Dashboard where you can:
+   - View and manage car listings
+   - Add new cars
+   - Mark cars as sold
+   - Access Analytics, Leads, and Appointments pages
+
+> **Note:** Admin and customer experiences are completely separate. Admins cannot access customer features (browsing, garage, etc.) and customers cannot access admin features.
 
 ## API Endpoints
 
