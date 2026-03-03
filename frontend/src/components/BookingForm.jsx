@@ -7,8 +7,11 @@
 
 import { useState, useEffect } from 'react'
 import api from '../api'
+import { useCustomerAuth } from '../context/CustomerAuthContext'
 
 export default function BookingForm({ carId, carModel, onClose, onSuccess }) {
+  const { customer } = useCustomerAuth()
+  
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_email: '',
@@ -16,6 +19,17 @@ export default function BookingForm({ carId, carModel, onClose, onSuccess }) {
     date: '',
     time: '',
   })
+  
+  // Auto-fill customer data when component mounts
+  useEffect(() => {
+    if (customer) {
+      setFormData(prev => ({
+        ...prev,
+        customer_name: customer.name || '',
+        customer_email: customer.email || ''
+      }))
+    }
+  }, [customer])
   const [availableSlots, setAvailableSlots] = useState([])
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)

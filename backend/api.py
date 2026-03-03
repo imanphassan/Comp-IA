@@ -168,6 +168,9 @@ def create_app() -> Flask:
             return response.status_code in [200, 201, 202]
         except Exception as e:
             print(f"[EMAIL] Failed to send email: {e}")
+            print(f"[EMAIL] Error type: {type(e).__name__}")
+            if hasattr(e, 'body'):
+                print(f"[EMAIL] Error body: {e.body}")
             return False
 
     def send_lead_confirmation_email(lead, car):
