@@ -78,7 +78,14 @@ Comp-IA/
    ```
    > **Note:** This will delete all existing data. The database will be recreated automatically when you start the server.
 
-5. Run the backend server:
+5. **(Optional)** Configure email for confirmation emails:
+   ```bash
+   export MAIL_USERNAME="your-email@gmail.com"
+   export MAIL_PASSWORD="your-app-password"
+   ```
+   > **Note:** For Gmail, enable 2FA and create an App Password at https://myaccount.google.com/apppasswords. The system works without email configured - it just won't send confirmations.
+
+6. Run the backend server:
    ```bash
    python api.py
    ```

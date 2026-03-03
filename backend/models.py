@@ -308,3 +308,35 @@ class SavedCar(db.Model):
             "car": self.car.to_dict() if self.car else None,
             "saved_at": self.saved_at.isoformat() if self.saved_at else None,
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SETTINGS MODEL (Email Configuration)
+# ─────────────────────────────────────────────────────────────────────────────
+# Stores application settings like email configuration.
+# Uses key-value pairs for flexibility.
+class Setting(db.Model):
+    __tablename__ = "setting"
+    
+    # Setting key (e.g., 'mail_username', 'mail_password')
+    key = db.Column(db.String(50), primary_key=True)
+    
+    # Setting value
+    value = db.Column(db.Text, nullable=True)
+    
+    @staticmethod
+    def get(key, default=None):
+        """Get a setting value by key."""
+        setting = Setting.query.get(key)
+        return setting.value if setting else default
+    
+    @staticmethod
+    def set(key, value):
+        """Set a setting value."""
+        setting = Setting.query.get(key)
+        if setting:
+            setting.value = value
+        else:
+            setting = Setting(key=key, value=value)
+            db.session.add(setting)
+        db.session.commit()

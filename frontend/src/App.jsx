@@ -13,6 +13,7 @@ import Navbar from './components/Navbar'
 import AdminLayout from './components/AdminLayout'
 
 // Customer Pages
+import LandingPage from './pages/LandingPage'
 import Home from './pages/Home'
 import CarDetail from './pages/CarDetail'
 import Map from './pages/Map'
@@ -49,8 +50,9 @@ export default function App() {
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* CUSTOMER ROUTES - with customer navbar */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      <Route path="/" element={<CustomerLayout><Home /></CustomerLayout>} />
-      <Route path="/listings" element={<Navigate to="/" replace />} />
+      <Route path="/" element={<><Navbar /><LandingPage /></>} />
+      <Route path="/browse" element={<CustomerLayout><Home /></CustomerLayout>} />
+      <Route path="/listings" element={<Navigate to="/browse" replace />} />
       <Route path="/car/:carId" element={<CustomerLayout><CarDetail /></CustomerLayout>} />
       <Route path="/cars/:carId" element={<CustomerLayout><CarDetail /></CustomerLayout>} />
       <Route path="/map" element={<CustomerLayout><Map /></CustomerLayout>} />

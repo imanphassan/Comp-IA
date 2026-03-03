@@ -21,7 +21,7 @@ export default function Navbar() {
         {/* Left side - Main navigation */}
         <div className="flex items-center space-x-6">
           <Link to="/" className="font-bold text-xl">EV Cars</Link>
-          <Link to="/" className="hover:text-gray-300">Browse</Link>
+          <Link to="/browse" className="hover:text-gray-300">Browse</Link>
           <Link to="/map" className="hover:text-gray-300">Map</Link>
           <Link to="/chatbot" className="hover:text-gray-300">Chatbot</Link>
           <Link to="/garage" className="hover:text-gray-300">My Garage</Link>

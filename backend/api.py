@@ -30,6 +30,10 @@ from werkzeug.utils import secure_filename
 # Regular expressions for email validation
 import re
 
+# SendGrid for sending emails
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail as SendGridMail, Email, To, Content
+
 # Local imports - database models and chatbot logic
 from models import db, Admin, Customer, Car, Lead, Appointment, SavedCar
 from chatbot import match_intent
@@ -129,6 +133,91 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
         seed_admin_if_missing()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # EMAIL CONFIGURATION (SendGrid)
+    # ─────────────────────────────────────────────────────────────────────────
+    # To enable email sending:
+    # 1. Sign up at https://sendgrid.com (free tier: 100 emails/day)
+    # 2. Create an API key with "Mail Send" permission
+    # 3. Verify your sender email in Sender Authentication
+    # 4. Replace the values below with your credentials
+    SENDGRID_API_KEY = ""  # Your SendGrid API key (starts with SG.)
+    SENDGRID_FROM_EMAIL = ""  # Your verified sender email
+    
+    def send_email(to_email, subject, body):
+        """
+        Send an email using SendGrid.
+        Returns True if successful, False otherwise.
+        """
+        if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
+            print("[EMAIL] Skipping email - SendGrid not configured")
+            return False
+        
+        try:
+            message = SendGridMail(
+                from_email=Email(SENDGRID_FROM_EMAIL),
+                to_emails=To(to_email),
+                subject=subject,
+                plain_text_content=Content("text/plain", body)
+            )
+            
+            sg = SendGridAPIClient(SENDGRID_API_KEY)
+            response = sg.send(message)
+            print(f"[EMAIL] Sent to {to_email} - Status: {response.status_code}")
+            return response.status_code in [200, 201, 202]
+        except Exception as e:
+            print(f"[EMAIL] Failed to send email: {e}")
+            return False
+
+    def send_lead_confirmation_email(lead, car):
+        """
+        Send confirmation email to customer after submitting interest form.
+        Silently fails if email is not configured.
+        """
+        subject = f"Thank you for your interest in {car.model}"
+        body = f"""Dear {lead.name},
+
+Thank you for expressing interest in the {car.year} {car.model}!
+
+We have received your inquiry and our team will contact you shortly.
+
+Car Details:
+- Model: {car.model}
+- Year: {car.year}
+- Price: AED {car.price:,.0f}
+- Range: {car.range_km} km
+
+Your Message: {lead.message or 'No message provided'}
+
+Best regards,
+EV Cars Team
+"""
+        return send_email(lead.email, subject, body)
+
+    def send_appointment_confirmation_email(appointment, car):
+        """
+        Send confirmation email to customer after booking a test drive.
+        Silently fails if email is not configured.
+        """
+        subject = f"Test Drive Confirmed - {car.model}"
+        body = f"""Dear {appointment.customer_name},
+
+Your test drive has been confirmed!
+
+Appointment Details:
+- Car: {car.year} {car.model}
+- Date: {appointment.appointment_date.strftime('%A, %B %d, %Y')}
+- Time: {appointment.appointment_time.strftime('%I:%M %p')}
+
+Please arrive 10 minutes before your scheduled time. Don't forget to bring your valid driver's license.
+
+If you need to reschedule or cancel, please contact us.
+
+Best regards,
+EV Cars Team
+"""
+        return send_email(appointment.customer_email, subject, body)
 
     # ─────────────────────────────────────────────────────────────────────────
     # AUTHENTICATION DECORATOR
@@ -940,6 +1029,9 @@ def create_app() -> Flask:
         db.session.add(lead)
         db.session.commit()
         
+        # Send confirmation email (non-blocking - doesn't fail if email fails)
+        send_lead_confirmation_email(lead, car)
+        
         return jsonify(lead.to_dict()), 201
 
     @app.get("/api/leads")
@@ -1115,6 +1207,10 @@ def create_app() -> Flask:
         )
         db.session.add(appointment)
         db.session.commit()
+        
+        # Send confirmation email (non-blocking - doesn't fail if email fails)
+        car = Car.query.get(car_id)
+        send_appointment_confirmation_email(appointment, car)
         
         return jsonify(appointment.to_dict()), 201
 
