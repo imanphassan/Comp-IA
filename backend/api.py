@@ -143,7 +143,7 @@ def create_app() -> Flask:
     # 3. Verify your sender email in Sender Authentication
     # 4. Replace the values below with your credentials
     SENDGRID_API_KEY = ""  # Your SendGrid API key (starts with SG.)
-    SENDGRID_FROM_EMAIL = ""  # Your verified sender email
+    SENDGRID_FROM_EMAIL = "imanphassan@gmail.com"  # Your verified sender email
     
     def send_email(to_email, subject, body):
         """
