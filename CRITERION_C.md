@@ -459,6 +459,193 @@ def match_intent(message: str) -> Tuple[str, str]:
 | First match wins | Returns immediately when a keyword is found |
 | Fallback response | Guides user when no intent matches |
 
+### Car Recommendation Algorithm
+
+The chatbot includes a recommendation engine that queries the database and scores cars based on user preferences. This demonstrates algorithmic thinking through entity extraction, weighted scoring, and ranking.
+
+#### Entity Extraction (`backend/chatbot.py`)
+
+```python
+@dataclass
+class UserCriteria:
+    """Data class to hold extracted user preferences."""
+    budget: Optional[float] = None
+    min_range: Optional[int] = None
+    max_charge_time: Optional[int] = None
+
+
+def extract_criteria(message: str) -> UserCriteria:
+    """
+    Extract numerical criteria from user message using regex patterns.
+    
+    Algorithm:
+    1. Normalize input to lowercase
+    2. Apply regex patterns for each criterion type
+    3. Extract and convert numerical values
+    4. Return structured UserCriteria object
+    """
+    msg = message.lower()
+    criteria = UserCriteria()
+    
+    # Budget patterns: "budget 80000", "80000 AED", "under 100k"
+    budget_patterns = [
+        r'budget\s*(?:of\s*)?([\d,]+)\s*k?',
+        r'([\d,]+)\s*k?\s*(?:aed|dirham)',
+        r'under\s*([\d,]+)\s*k?',
+    ]
+    for pattern in budget_patterns:
+        match = re.search(pattern, msg)
+        if match:
+            value = match.group(1).replace(',', '')
+            criteria.budget = float(value)
+            break
+    
+    # Range patterns: "300 km", "range 400"
+    range_patterns = [
+        r'([\d]+)\s*(?:km|kilometer|kilometre)',
+        r'range\s*(?:of\s*)?([\d]+)',
+    ]
+    for pattern in range_patterns:
+        match = re.search(pattern, msg)
+        if match:
+            criteria.min_range = int(match.group(1))
+            break
+    
+    return criteria
+```
+
+| Component | Explanation |
+|-----------|-------------|
+| `@dataclass` | Python data class for structured criteria storage |
+| Regex patterns | Multiple patterns to match different phrasings |
+| `re.search()` | Finds first match of pattern in string |
+| `match.group(1)` | Extracts the captured number from the pattern |
+
+#### Weighted Scoring Algorithm
+
+```python
+def score_car(car, criteria: UserCriteria, max_range: int, min_charge: int, max_price: float) -> float:
+    """
+    Calculate a match score for a car based on user criteria.
+    
+    Scoring Formula:
+        score = (range_score × 0.4) + (charge_score × 0.3) + (price_score × 0.3)
+    """
+    score = 0.0
+    
+    # RANGE SCORE (40% weight) - Higher range = higher score
+    if max_range > 0:
+        range_score = (car.range_km / max_range) * 100
+        if criteria.min_range and car.range_km >= criteria.min_range:
+            range_score = min(100, range_score + 10)  # Bonus for meeting requirement
+        score += range_score * 0.4
+    
+    # CHARGE TIME SCORE (30% weight) - Lower time = higher score (inverted)
+    if min_charge > 0 and car.charge_time_min > 0:
+        charge_score = (min_charge / car.charge_time_min) * 100
+        charge_score = min(100, charge_score)
+        score += charge_score * 0.3
+    
+    # PRICE SCORE (30% weight) - Lower price relative to budget = higher score
+    if criteria.budget:
+        if car.price <= criteria.budget:
+            price_score = ((criteria.budget - car.price) / criteria.budget) * 50 + 50
+        else:
+            price_score = max(0, 50 - ((car.price - criteria.budget) / criteria.budget) * 50)
+        score += price_score * 0.3
+    
+    return round(score, 1)
+```
+
+| Scoring Component | Weight | Logic |
+|-------------------|--------|-------|
+| Range Score | 40% | Normalized to 0-100 based on best range in inventory |
+| Charge Time Score | 30% | Inverted scale - fastest charging gets highest score |
+| Price Score | 30% | Based on how much under budget the car is |
+| Bonus Points | +10 | Added when car meets specific user thresholds |
+
+#### Recommendation Algorithm
+
+```python
+def recommend_cars(cars: list, criteria: UserCriteria, top_n: int = 3) -> List[dict]:
+    """
+    Recommend top N cars based on user criteria.
+    
+    Algorithm:
+    1. Filter out cars over budget (soft filter - keep 20% buffer)
+    2. Calculate normalization values from available inventory
+    3. Score each car using the weighted scoring algorithm
+    4. Sort by score descending
+    5. Return top N results
+    """
+    # Step 1: Filter by budget with 20% flexibility
+    if criteria.budget:
+        budget_limit = criteria.budget * 1.2
+        filtered_cars = [c for c in cars if c.price <= budget_limit]
+        if len(filtered_cars) < top_n:
+            filtered_cars = cars  # Fall back to all cars if too few
+    else:
+        filtered_cars = cars
+    
+    # Step 2: Calculate normalization values
+    max_range = max(c.range_km for c in filtered_cars)
+    min_charge = min(c.charge_time_min for c in filtered_cars)
+    max_price = max(c.price for c in filtered_cars)
+    
+    # Step 3: Score each car
+    scored_cars = []
+    for car in filtered_cars:
+        car_score = score_car(car, criteria, max_range, min_charge, max_price)
+        scored_cars.append((car, car_score))
+    
+    # Step 4: Sort by score (descending)
+    scored_cars.sort(key=lambda x: x[1], reverse=True)
+    
+    # Step 5: Return top N
+    return scored_cars[:top_n]
+```
+
+#### API Integration (`backend/api.py`)
+
+```python
+@app.post("/api/chatbot")
+def api_chatbot():
+    data = request.get_json() or {}
+    message = (data.get("message") or "").strip()
+    
+    # Check for recommendation request
+    if is_recommendation_request(message):
+        # Step 1: Extract criteria from user message
+        criteria = extract_criteria(message)
+        
+        # Step 2: Query database for available cars
+        available_cars = Car.query.filter_by(status='available').all()
+        
+        # Step 3: Run recommendation algorithm
+        recommendations = recommend_cars(available_cars, criteria, top_n=3)
+        
+        # Step 4: Format response
+        reply = format_recommendations(recommendations, criteria)
+        
+        return jsonify({
+            "intent": "recommendation",
+            "reply": reply,
+            "recommendations": recommendations
+        })
+    
+    # Standard intent matching for non-recommendation queries
+    intent, reply = match_intent(message)
+    return jsonify({"intent": intent, "reply": reply})
+```
+
+| Algorithmic Thinking | Explanation |
+|---------------------|-------------|
+| **Decomposition** | Problem split into: entity extraction → filtering → scoring → ranking |
+| **Pattern Recognition** | Regex patterns identify budget/range/charging preferences |
+| **Abstraction** | `UserCriteria` dataclass abstracts user preferences |
+| **Algorithm Design** | Weighted scoring formula balances multiple factors |
+| **Data Structures** | List of tuples `(car, score)` for sorting; dictionary for results |
+
 ---
 
 ## 9. React Context for State Management

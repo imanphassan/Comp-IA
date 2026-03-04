@@ -36,7 +36,7 @@ from sendgrid.helpers.mail import Mail as SendGridMail, Email, To, Content
 
 # Local imports - database models and chatbot logic
 from models import db, Admin, Customer, Car, Lead, Appointment, SavedCar
-from chatbot import match_intent
+from chatbot import match_intent, is_recommendation_request, extract_criteria, recommend_cars, format_recommendations
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FILE UPLOAD CONFIGURATION
@@ -827,18 +827,50 @@ EV Cars Team
         - Charging times and types
         - Battery health and degradation
         - Pricing and budgets
+        - Car recommendations (NEW: queries database)
+        
+        For recommendation requests, the chatbot:
+        1. Extracts criteria (budget, range, charge time) from the message
+        2. Queries the database for available cars
+        3. Scores and ranks cars using a weighted algorithm
+        4. Returns top 3 recommendations with match percentages
         
         Args (JSON body):
             message: User's question or message
             
         Returns:
-            JSON: {intent: string, reply: string}
+            JSON: {intent: string, reply: string, recommendations?: array}
         """
         data = request.get_json() or {}
         message = (data.get("message") or "").strip()
         
-        # match_intent analyzes the message and returns the detected
-        # intent category along with an appropriate response
+        # ─────────────────────────────────────────────────────────────
+        # CHECK FOR RECOMMENDATION REQUEST
+        # If user is asking for car recommendations, use the algorithm
+        # ─────────────────────────────────────────────────────────────
+        if is_recommendation_request(message):
+            # Step 1: Extract criteria from user message
+            criteria = extract_criteria(message)
+            
+            # Step 2: Query database for available cars
+            available_cars = Car.query.filter_by(status='available').all()
+            
+            # Step 3: Run recommendation algorithm
+            recommendations = recommend_cars(available_cars, criteria, top_n=3)
+            
+            # Step 4: Format response
+            reply = format_recommendations(recommendations, criteria)
+            
+            return jsonify({
+                "intent": "recommendation",
+                "reply": reply,
+                "recommendations": recommendations  # Include structured data for frontend
+            })
+        
+        # ─────────────────────────────────────────────────────────────
+        # STANDARD INTENT MATCHING
+        # For non-recommendation queries, use keyword matching
+        # ─────────────────────────────────────────────────────────────
         intent, reply = match_intent(message)
         
         return jsonify({"intent": intent, "reply": reply})
