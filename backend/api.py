@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# Flask REST API for EV Cars Application
+# Flask REST API for EV Cars Application (Firebase/Firestore Version)
 # ═══════════════════════════════════════════════════════════════════════════════
 # This file contains the main backend API for the EV Cars marketplace.
 # It handles:
@@ -7,6 +7,8 @@
 #   - CRUD operations for car listings
 #   - Image file uploads for car photos
 #   - Chatbot integration for EV-related questions
+#
+# Database: Firebase Firestore (NoSQL)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 import os
@@ -34,8 +36,8 @@ import re
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail as SendGridMail, Email, To, Content
 
-# Local imports - database models and chatbot logic
-from models import db, Admin, Customer, Car, Lead, Appointment, SavedCar
+# Local imports - Firebase database functions and chatbot logic
+import firebase_db as fdb
 from chatbot import match_intent, is_recommendation_request, extract_criteria, recommend_cars, format_recommendations
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -94,13 +96,9 @@ def create_app() -> Flask:
     app = Flask(__name__)
     
     # ─────────────────────────────────────────────────────────────────────────
-    # DATABASE CONFIGURATION
+    # APPLICATION CONFIGURATION
     # ─────────────────────────────────────────────────────────────────────────
-    # SQLite is used as the database - a lightweight, file-based database
-    # that doesn't require a separate server process.
     app.config["SECRET_KEY"] = JWT_SECRET
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///ev_site.db"
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False  # Disable event system for performance
     
     # ─────────────────────────────────────────────────────────────────────────
     # FILE UPLOAD CONFIGURATION
@@ -114,24 +112,18 @@ def create_app() -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # Limit uploads to 16MB
 
     # ─────────────────────────────────────────────────────────────────────────
-    # CORS AND DATABASE INITIALIZATION
+    # CORS INITIALIZATION
     # ─────────────────────────────────────────────────────────────────────────
     # CORS allows the React frontend (running on a different port) to make
     # requests to this API. supports_credentials=True allows cookies/auth headers.
     CORS(app, supports_credentials=True)
-    
-    # Initialize SQLAlchemy with this Flask app instance
-    db.init_app(app)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # DATABASE INITIALIZATION
+    # DATABASE INITIALIZATION (Firebase)
     # ─────────────────────────────────────────────────────────────────────────
-    # app.app_context() creates an application context, which is required
-    # for database operations outside of a request.
-    # db.create_all() creates all tables defined in models.py if they don't exist.
-    # seed_admin_if_missing() creates a default admin user for initial access.
+    # Firebase is initialized in firebase_db.py when imported
+    # Seed admin if missing
     with app.app_context():
-        db.create_all()
         seed_admin_if_missing()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -178,40 +170,45 @@ def create_app() -> Flask:
         Send confirmation email to customer after submitting interest form.
         Silently fails if email is not configured.
         """
-        subject = f"Thank you for your interest in {car.model}"
-        body = f"""Dear {lead.name},
+        subject = f"Thank you for your interest in {car.get('model')}"
+        body = f"""Dear {lead.get('name')},
 
-Thank you for expressing interest in the {car.year} {car.model}!
+Thank you for expressing interest in the {car.get('year')} {car.get('model')}!
 
 We have received your inquiry and our team will contact you shortly.
 
 Car Details:
-- Model: {car.model}
-- Year: {car.year}
-- Price: AED {car.price:,.0f}
-- Range: {car.range_km} km
+- Model: {car.get('model')}
+- Year: {car.get('year')}
+- Price: AED {car.get('price'):,.0f}
+- Range: {car.get('range_km')} km
 
-Your Message: {lead.message or 'No message provided'}
+Your Message: {lead.get('message') or 'No message provided'}
 
 Best regards,
 EV Cars Team
 """
-        return send_email(lead.email, subject, body)
+        return send_email(lead.get('email'), subject, body)
 
     def send_appointment_confirmation_email(appointment, car):
         """
         Send confirmation email to customer after booking a test drive.
         Silently fails if email is not configured.
         """
-        subject = f"Test Drive Confirmed - {car.model}"
-        body = f"""Dear {appointment.customer_name},
+        subject = f"Test Drive Confirmed - {car.get('model')}"
+        
+        # Parse date for formatting
+        date_str = appointment.get('appointment_date')
+        time_str = appointment.get('appointment_time')
+        
+        body = f"""Dear {appointment.get('customer_name')},
 
 Your test drive has been confirmed!
 
 Appointment Details:
-- Car: {car.year} {car.model}
-- Date: {appointment.appointment_date.strftime('%A, %B %d, %Y')}
-- Time: {appointment.appointment_time.strftime('%I:%M %p')}
+- Car: {car.get('year')} {car.get('model')}
+- Date: {date_str}
+- Time: {time_str}
 
 Please arrive 10 minutes before your scheduled time. Don't forget to bring your valid driver's license.
 
@@ -220,7 +217,7 @@ If you need to reschedule or cancel, please contact us.
 Best regards,
 EV Cars Team
 """
-        return send_email(appointment.customer_email, subject, body)
+        return send_email(appointment.get('customer_email'), subject, body)
 
     # ─────────────────────────────────────────────────────────────────────────
     # AUTHENTICATION DECORATOR
@@ -354,9 +351,9 @@ EV Cars Team
         
         return errors
 
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
     # AUTH ENDPOINTS
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
 
     @app.post("/api/auth/login")
     def api_login():
@@ -380,25 +377,25 @@ EV Cars Team
         password = (data.get("password") or "").strip()
 
         # Query database for admin with matching username
-        admin = Admin.query.filter_by(username=username).first()
+        admin = fdb.get_admin_by_username(username)
         
         # Check if admin exists AND password matches
         # check_password_hash securely compares the provided password
         # against the stored hash without exposing the actual password
-        if not admin or not check_password_hash(admin.password_hash, password):
+        if not admin or not check_password_hash(admin.get('password_hash', ''), password):
             return jsonify({"error": "Invalid credentials"}), 401
 
         # Generate JWT token with expiration time
         # The token contains the admin_id which identifies the user
         exp = datetime.now(timezone.utc) + timedelta(hours=JWT_EXP_HOURS)
         token = jwt.encode(
-            {"admin_id": admin.admin_id, "exp": exp},
+            {"admin_id": admin.get('admin_id'), "exp": exp},
             JWT_SECRET,
             algorithm=JWT_ALGORITHM,
         )
         
         # Return token and username for client-side storage
-        return jsonify({"token": token, "username": admin.username})
+        return jsonify({"token": token, "username": admin.get('username')})
 
     @app.get("/api/auth/me")
     @token_required
@@ -414,12 +411,12 @@ EV Cars Team
         users can access this endpoint and provides request.admin_id.
         """
         # Retrieve admin using the ID from the JWT token
-        admin = Admin.query.get(request.admin_id)
+        admin = fdb.get_admin_by_id(request.admin_id)
         
         if not admin:
             return jsonify({"error": "Admin not found"}), 404
         
-        return jsonify({"admin_id": admin.admin_id, "username": admin.username})
+        return jsonify({"admin_id": admin.get('admin_id'), "username": admin.get('username')})
 
     # ═══════════════════════════════════════════════════════════════════════════
     # CUSTOMER AUTHENTICATION ENDPOINTS
@@ -462,7 +459,7 @@ EV Cars Team
             errors["email"] = "Email is required"
         elif not re.match(email_pattern, email):
             errors["email"] = "Invalid email format"
-        elif Customer.query.filter_by(email=email).first():
+        elif fdb.get_customer_by_email(email):
             errors["email"] = "Email already registered"
         
         if not password:
@@ -474,24 +471,22 @@ EV Cars Team
             return jsonify({"errors": errors}), 400
         
         # Create customer with hashed password
-        customer = Customer(
+        customer = fdb.create_customer(
             name=name,
             email=email,
             password_hash=generate_password_hash(password),
             phone=phone if phone else None,
         )
-        db.session.add(customer)
-        db.session.commit()
         
         # Generate token for immediate login
         exp = datetime.now(timezone.utc) + timedelta(hours=JWT_EXP_HOURS)
         token = jwt.encode(
-            {"customer_id": customer.customer_id, "type": "customer", "exp": exp},
+            {"customer_id": customer.get('customer_id'), "type": "customer", "exp": exp},
             JWT_SECRET,
             algorithm=JWT_ALGORITHM,
         )
         
-        return jsonify({"token": token, "customer": customer.to_dict()}), 201
+        return jsonify({"token": token, "customer": fdb.customer_to_dict(customer)}), 201
 
     @app.post("/api/customer/login")
     def api_customer_login():
@@ -509,20 +504,20 @@ EV Cars Team
         email = (data.get("email") or "").strip().lower()
         password = (data.get("password") or "")
         
-        customer = Customer.query.filter_by(email=email).first()
+        customer = fdb.get_customer_by_email(email)
         
-        if not customer or not check_password_hash(customer.password_hash, password):
+        if not customer or not check_password_hash(customer.get('password_hash', ''), password):
             return jsonify({"error": "Invalid email or password"}), 401
         
         # Generate JWT token
         exp = datetime.now(timezone.utc) + timedelta(hours=JWT_EXP_HOURS)
         token = jwt.encode(
-            {"customer_id": customer.customer_id, "type": "customer", "exp": exp},
+            {"customer_id": customer.get('customer_id'), "type": "customer", "exp": exp},
             JWT_SECRET,
             algorithm=JWT_ALGORITHM,
         )
         
-        return jsonify({"token": token, "customer": customer.to_dict()})
+        return jsonify({"token": token, "customer": fdb.customer_to_dict(customer)})
 
     @app.get("/api/customer/me")
     def api_customer_me():
@@ -541,19 +536,19 @@ EV Cars Team
             if payload.get("type") != "customer":
                 return jsonify({"error": "Invalid token type"}), 401
             
-            customer = Customer.query.get(payload["customer_id"])
+            customer = fdb.get_customer_by_id(payload["customer_id"])
             if not customer:
                 return jsonify({"error": "Customer not found"}), 404
             
-            return jsonify({"customer": customer.to_dict()})
+            return jsonify({"customer": fdb.customer_to_dict(customer)})
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token expired"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
 
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
     # CUSTOMER GARAGE ENDPOINTS (Saved Cars)
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
 
     def get_customer_from_token():
         """Helper to extract customer from JWT token."""
@@ -566,7 +561,7 @@ EV Cars Team
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
             if payload.get("type") != "customer":
                 return None
-            return Customer.query.get(payload["customer_id"])
+            return fdb.get_customer_by_id(payload["customer_id"])
         except:
             return None
 
@@ -579,11 +574,11 @@ EV Cars Team
         if not customer:
             return jsonify({"error": "Authentication required"}), 401
         
-        saved = SavedCar.query.filter_by(customer_id=customer.customer_id).all()
-        return jsonify([s.to_dict() for s in saved])
+        saved = fdb.get_customer_garage(customer.get('customer_id'))
+        return jsonify([fdb.saved_car_to_dict(s) for s in saved])
 
-    @app.post("/api/customer/garage/<int:car_id>")
-    def api_customer_garage_add(car_id: int):
+    @app.post("/api/customer/garage/<car_id>")
+    def api_customer_garage_add(car_id: str):
         """
         Add a car to customer's garage.
         """
@@ -591,27 +586,15 @@ EV Cars Team
         if not customer:
             return jsonify({"error": "Authentication required"}), 401
         
-        car = Car.query.get(car_id)
+        car = fdb.get_car_by_id(car_id)
         if not car:
             return jsonify({"error": "Car not found"}), 404
         
-        # Check if already saved
-        existing = SavedCar.query.filter_by(
-            customer_id=customer.customer_id,
-            car_id=car_id
-        ).first()
-        
-        if existing:
-            return jsonify({"message": "Car already in garage"}), 200
-        
-        saved = SavedCar(customer_id=customer.customer_id, car_id=car_id)
-        db.session.add(saved)
-        db.session.commit()
-        
-        return jsonify(saved.to_dict()), 201
+        saved = fdb.add_to_garage(customer.get('customer_id'), car_id)
+        return jsonify(fdb.saved_car_to_dict(saved)), 201
 
-    @app.delete("/api/customer/garage/<int:car_id>")
-    def api_customer_garage_remove(car_id: int):
+    @app.delete("/api/customer/garage/<car_id>")
+    def api_customer_garage_remove(car_id: str):
         """
         Remove a car from customer's garage.
         """
@@ -619,22 +602,16 @@ EV Cars Team
         if not customer:
             return jsonify({"error": "Authentication required"}), 401
         
-        saved = SavedCar.query.filter_by(
-            customer_id=customer.customer_id,
-            car_id=car_id
-        ).first()
+        removed = fdb.remove_from_garage(customer.get('customer_id'), car_id)
         
-        if not saved:
+        if not removed:
             return jsonify({"error": "Car not in garage"}), 404
-        
-        db.session.delete(saved)
-        db.session.commit()
         
         return jsonify({"message": "Car removed from garage"})
 
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
     # CAR ENDPOINTS
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
 
     @app.get("/api/cars")
     def api_cars_list():
@@ -645,7 +622,7 @@ EV Cars Team
             budget: Maximum price filter (optional)
             min_range: Minimum range in km filter (optional)
         
-        The filtering is done server-side using SQLAlchemy query building.
+        The filtering is done server-side using Firestore queries.
         Results are always sorted by price ascending (cheapest first).
         
         Returns:
@@ -655,35 +632,25 @@ EV Cars Team
         budget = request.args.get("budget", "").strip()
         min_range = request.args.get("min_range", "").strip()
 
-        # Start building the query
-        q = Car.query
-        
         # Parse filter values (returns None if invalid/empty)
         budget_value = parse_float(budget) if budget else None
         min_range_value = parse_int(min_range) if min_range else None
 
-        # Apply filters conditionally
-        # Only add filter if a valid value was provided
-        if budget_value is not None:
-            q = q.filter(Car.price <= budget_value)
-        if min_range_value is not None:
-            q = q.filter(Car.range_km >= min_range_value)
-
-        # Execute query with sorting and convert to list of dictionaries
-        cars = q.order_by(Car.price.asc()).all()
-        return jsonify([c.to_dict() for c in cars])
+        # Get cars with filters
+        cars = fdb.get_all_cars(budget=budget_value, min_range=min_range_value)
+        return jsonify([fdb.car_to_dict(c) for c in cars])
 
     @app.get("/api/cars/featured")
     def api_cars_featured():
-        cars = Car.query.order_by(Car.price.asc()).limit(6).all()
-        return jsonify([c.to_dict() for c in cars])
+        cars = fdb.get_featured_cars(limit=6)
+        return jsonify([fdb.car_to_dict(c) for c in cars])
 
-    @app.get("/api/cars/<int:car_id>")
-    def api_car_detail(car_id: int):
-        car = Car.query.get(car_id)
+    @app.get("/api/cars/<car_id>")
+    def api_car_detail(car_id: str):
+        car = fdb.get_car_by_id(car_id)
         if not car:
             return jsonify({"error": "Car not found"}), 404
-        return jsonify(car.to_dict())
+        return jsonify(fdb.car_to_dict(car))
 
     @app.post("/api/cars")
     @token_required
@@ -693,7 +660,7 @@ EV Cars Team
         if errors:
             return jsonify({"errors": errors}), 400
 
-        car = Car(
+        car = fdb.create_car(
             model=data["model"].strip(),
             year=int(data["year"]),
             price=float(data["price"]),
@@ -702,14 +669,12 @@ EV Cars Team
             description=data["description"].strip(),
             image_url=data["image_url"].strip(),
         )
-        db.session.add(car)
-        db.session.commit()
-        return jsonify(car.to_dict()), 201
+        return jsonify(fdb.car_to_dict(car)), 201
 
-    @app.put("/api/cars/<int:car_id>")
+    @app.put("/api/cars/<car_id>")
     @token_required
-    def api_car_update(car_id: int):
-        car = Car.query.get(car_id)
+    def api_car_update(car_id: str):
+        car = fdb.get_car_by_id(car_id)
         if not car:
             return jsonify({"error": "Car not found"}), 404
 
@@ -718,39 +683,29 @@ EV Cars Team
         if errors:
             return jsonify({"errors": errors}), 400
 
-        car.model = data["model"].strip()
-        car.year = int(data["year"])
-        car.price = float(data["price"])
-        car.range_km = int(data["range_km"])
-        car.charge_time_min = int(data["charge_time_min"])
-        car.description = data["description"].strip()
-        car.image_url = data["image_url"].strip()
+        updated_car = fdb.update_car(
+            car_id,
+            model=data["model"].strip(),
+            year=int(data["year"]),
+            price=float(data["price"]),
+            range_km=int(data["range_km"]),
+            charge_time_min=int(data["charge_time_min"]),
+            description=data["description"].strip(),
+            image_url=data["image_url"].strip(),
+        )
+        return jsonify(fdb.car_to_dict(updated_car))
 
-        db.session.commit()
-        return jsonify(car.to_dict())
-
-    @app.delete("/api/cars/<int:car_id>")
+    @app.delete("/api/cars/<car_id>")
     @token_required
-    def api_car_delete(car_id: int):
-        car = Car.query.get(car_id)
-        if not car:
+    def api_car_delete(car_id: str):
+        deleted = fdb.delete_car(car_id)
+        if not deleted:
             return jsonify({"error": "Car not found"}), 404
-        
-        # Delete related records first to avoid foreign key constraint errors
-        # Use synchronize_session=False for bulk deletes
-        Lead.query.filter_by(car_id=car_id).delete(synchronize_session=False)
-        Appointment.query.filter_by(car_id=car_id).delete(synchronize_session=False)
-        SavedCar.query.filter_by(car_id=car_id).delete(synchronize_session=False)
-        db.session.commit()
-        
-        # Now delete the car
-        db.session.delete(car)
-        db.session.commit()
         return jsonify({"message": "Car deleted"})
 
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
     # FILE UPLOAD ENDPOINT
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
 
     @app.post("/api/upload")
     @token_required
@@ -812,9 +767,9 @@ EV Cars Team
         """
         return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
     # CHATBOT ENDPOINT
-    # ─────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
 
     @app.post("/api/chatbot")
     def api_chatbot():
@@ -844,19 +799,37 @@ EV Cars Team
         data = request.get_json() or {}
         message = (data.get("message") or "").strip()
         
-        # ─────────────────────────────────────────────────────────────
+        # ─────────────────────────────────────────────────────────────────────
         # CHECK FOR RECOMMENDATION REQUEST
         # If user is asking for car recommendations, use the algorithm
-        # ─────────────────────────────────────────────────────────────
+        # ─────────────────────────────────────────────────────────────────────
         if is_recommendation_request(message):
             # Step 1: Extract criteria from user message
             criteria = extract_criteria(message)
             
             # Step 2: Query database for available cars
-            available_cars = Car.query.filter_by(status='available').all()
+            available_cars = fdb.get_available_cars()
             
             # Step 3: Run recommendation algorithm
-            recommendations = recommend_cars(available_cars, criteria, top_n=3)
+            # Convert to format expected by recommend_cars
+            car_objects = []
+            for car in available_cars:
+                # Create a simple object-like dict with attribute access
+                class CarObj:
+                    pass
+                obj = CarObj()
+                obj.car_id = car.get('car_id')
+                obj.model = car.get('model')
+                obj.year = car.get('year')
+                obj.price = car.get('price')
+                obj.range_km = car.get('range_km')
+                obj.charge_time_min = car.get('charge_time_min')
+                obj.description = car.get('description')
+                obj.image_url = car.get('image_url')
+                obj.status = car.get('status')
+                car_objects.append(obj)
+            
+            recommendations = recommend_cars(car_objects, criteria, top_n=3)
             
             # Step 4: Format response
             reply = format_recommendations(recommendations, criteria)
@@ -867,10 +840,10 @@ EV Cars Team
                 "recommendations": recommendations  # Include structured data for frontend
             })
         
-        # ─────────────────────────────────────────────────────────────
+        # ─────────────────────────────────────────────────────────────────────
         # STANDARD INTENT MATCHING
         # For non-recommendation queries, use keyword matching
-        # ─────────────────────────────────────────────────────────────
+        # ─────────────────────────────────────────────────────────────────────
         intent, reply = match_intent(message)
         
         return jsonify({"intent": intent, "reply": reply})
@@ -879,9 +852,9 @@ EV Cars Team
     # FEATURE 1: REVENUE & ANALYTICS ENDPOINTS
     # ═══════════════════════════════════════════════════════════════════════════
 
-    @app.post("/api/cars/<int:car_id>/sell")
+    @app.post("/api/cars/<car_id>/sell")
     @token_required
-    def api_car_sell(car_id: int):
+    def api_car_sell(car_id: str):
         """
         Mark a car as sold and record the sale price.
         
@@ -894,7 +867,7 @@ EV Cars Team
         Returns:
             JSON: Updated car object
         """
-        car = Car.query.get(car_id)
+        car = fdb.get_car_by_id(car_id)
         if not car:
             return jsonify({"error": "Car not found"}), 404
         
@@ -912,12 +885,8 @@ EV Cars Team
             return jsonify({"error": "Invalid sale price"}), 400
         
         # Update car with sale information
-        car.status = "sold"
-        car.sale_price = sale_price
-        car.sold_date = datetime.now(timezone.utc)
-        
-        db.session.commit()
-        return jsonify(car.to_dict())
+        updated_car = fdb.sell_car(car_id, sale_price)
+        return jsonify(fdb.car_to_dict(updated_car))
 
     @app.get("/api/analytics/summary")
     @token_required
@@ -934,21 +903,7 @@ EV Cars Team
         Returns:
             JSON: Analytics summary object
         """
-        # Query all sold cars
-        sold_cars = Car.query.filter_by(status="sold").all()
-        available_cars = Car.query.filter_by(status="available").count()
-        
-        # Calculate aggregates
-        total_revenue = sum(car.sale_price or 0 for car in sold_cars)
-        cars_sold = len(sold_cars)
-        avg_sale_price = total_revenue / cars_sold if cars_sold > 0 else 0
-        
-        return jsonify({
-            "total_revenue": total_revenue,
-            "cars_sold": cars_sold,
-            "average_sale_price": round(avg_sale_price, 2),
-            "available_cars": available_cars,
-        })
+        return jsonify(fdb.get_analytics_summary())
 
     @app.get("/api/analytics/sales-by-model")
     @token_required
@@ -962,20 +917,7 @@ EV Cars Team
         Returns:
             JSON: Array of {model, count} objects
         """
-        sold_cars = Car.query.filter_by(status="sold").all()
-        
-        # Aggregate sales by model using dictionary
-        model_counts = {}
-        for car in sold_cars:
-            # Extract base model name (e.g., "Tesla Model 3" from "Tesla Model 3 Long Range")
-            model_name = car.model
-            model_counts[model_name] = model_counts.get(model_name, 0) + 1
-        
-        # Convert to array format for Chart.js
-        result = [{"model": model, "count": count} for model, count in model_counts.items()]
-        result.sort(key=lambda x: x["count"], reverse=True)
-        
-        return jsonify(result)
+        return jsonify(fdb.get_sales_by_model())
 
     @app.get("/api/analytics/revenue-over-time")
     @token_required
@@ -988,20 +930,7 @@ EV Cars Team
         Returns:
             JSON: Array of {month, revenue} objects
         """
-        sold_cars = Car.query.filter_by(status="sold").filter(Car.sold_date.isnot(None)).all()
-        
-        # Aggregate revenue by month
-        monthly_revenue = {}
-        for car in sold_cars:
-            # Format: "2024-01" for January 2024
-            month_key = car.sold_date.strftime("%Y-%m")
-            monthly_revenue[month_key] = monthly_revenue.get(month_key, 0) + (car.sale_price or 0)
-        
-        # Convert to sorted array
-        result = [{"month": month, "revenue": revenue} for month, revenue in monthly_revenue.items()]
-        result.sort(key=lambda x: x["month"])
-        
-        return jsonify(result)
+        return jsonify(fdb.get_revenue_over_time())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # FEATURE 2: LEAD MANAGEMENT ENDPOINTS
@@ -1044,10 +973,11 @@ EV Cars Team
         elif not re.match(email_pattern, email):
             errors["email"] = "Invalid email format"
         
+        car = None
         if not car_id:
             errors["car_id"] = "Car ID is required"
         else:
-            car = Car.query.get(car_id)
+            car = fdb.get_car_by_id(str(car_id))
             if not car:
                 errors["car_id"] = "Car not found"
         
@@ -1055,19 +985,17 @@ EV Cars Team
             return jsonify({"errors": errors}), 400
         
         # Create and save lead
-        lead = Lead(
+        lead = fdb.create_lead(
             name=name,
             email=email,
+            car_id=str(car_id),
             message=message if message else None,
-            car_id=car_id,
         )
-        db.session.add(lead)
-        db.session.commit()
         
         # Send confirmation email (non-blocking - doesn't fail if email fails)
         send_lead_confirmation_email(lead, car)
         
-        return jsonify(lead.to_dict()), 201
+        return jsonify(fdb.lead_to_dict(lead)), 201
 
     @app.get("/api/leads")
     @token_required
@@ -1080,24 +1008,22 @@ EV Cars Team
         Returns:
             JSON: Array of lead objects
         """
-        leads = Lead.query.order_by(Lead.created_at.desc()).all()
-        return jsonify([lead.to_dict() for lead in leads])
+        leads = fdb.get_all_leads()
+        return jsonify([fdb.lead_to_dict(lead) for lead in leads])
 
-    @app.delete("/api/leads/<int:lead_id>")
+    @app.delete("/api/leads/<lead_id>")
     @token_required
-    def api_lead_delete(lead_id: int):
+    def api_lead_delete(lead_id: str):
         """
         Delete a lead (after follow-up is complete).
         
         Returns:
             JSON: Success message
         """
-        lead = Lead.query.get(lead_id)
-        if not lead:
+        deleted = fdb.delete_lead(lead_id)
+        if not deleted:
             return jsonify({"error": "Lead not found"}), 404
         
-        db.session.delete(lead)
-        db.session.commit()
         return jsonify({"message": "Lead deleted"})
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1125,8 +1051,8 @@ EV Cars Team
             return jsonify({"error": "Date is required"}), 400
         
         try:
-            from datetime import date as date_type
-            appointment_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            # Validate date format
+            datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
             return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
         
@@ -1136,14 +1062,7 @@ EV Cars Team
             all_slots.append(f"{hour:02d}:00")
         
         # Get booked slots for this date
-        booked_appointments = Appointment.query.filter_by(
-            appointment_date=appointment_date,
-            status="scheduled"
-        ).all()
-        
-        booked_times = set()
-        for apt in booked_appointments:
-            booked_times.add(apt.appointment_time.strftime("%H:%M"))
+        booked_times = fdb.get_booked_slots(date_str)
         
         # Filter out booked slots
         available_slots = [slot for slot in all_slots if slot not in booked_times]
@@ -1191,30 +1110,29 @@ EV Cars Team
         elif not re.match(email_pattern, customer_email):
             errors["customer_email"] = "Invalid email format"
         
+        car = None
         if not car_id:
             errors["car_id"] = "Car ID is required"
         else:
-            car = Car.query.get(car_id)
+            car = fdb.get_car_by_id(str(car_id))
             if not car:
                 errors["car_id"] = "Car not found"
         
-        # Parse and validate date
-        appointment_date = None
+        # Validate date format
         if not date_str:
             errors["date"] = "Date is required"
         else:
             try:
-                appointment_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                datetime.strptime(date_str, "%Y-%m-%d")
             except ValueError:
                 errors["date"] = "Invalid date format. Use YYYY-MM-DD"
         
-        # Parse and validate time
-        appointment_time = None
+        # Validate time format
         if not time_str:
             errors["time"] = "Time is required"
         else:
             try:
-                appointment_time = datetime.strptime(time_str, "%H:%M").time()
+                datetime.strptime(time_str, "%H:%M")
             except ValueError:
                 errors["time"] = "Invalid time format. Use HH:MM"
         
@@ -1222,32 +1140,23 @@ EV Cars Team
             return jsonify({"errors": errors}), 400
         
         # Check for double-booking
-        existing = Appointment.query.filter_by(
-            appointment_date=appointment_date,
-            appointment_time=appointment_time,
-            status="scheduled"
-        ).first()
-        
-        if existing:
+        if not fdb.is_slot_available(date_str, time_str):
             return jsonify({"error": "This time slot is already booked"}), 409
         
         # Create appointment
-        appointment = Appointment(
+        appointment = fdb.create_appointment(
             customer_name=customer_name,
             customer_email=customer_email,
+            car_id=str(car_id),
+            appointment_date=date_str,
+            appointment_time=time_str,
             customer_phone=customer_phone if customer_phone else None,
-            car_id=car_id,
-            appointment_date=appointment_date,
-            appointment_time=appointment_time,
         )
-        db.session.add(appointment)
-        db.session.commit()
         
         # Send confirmation email (non-blocking - doesn't fail if email fails)
-        car = Car.query.get(car_id)
         send_appointment_confirmation_email(appointment, car)
         
-        return jsonify(appointment.to_dict()), 201
+        return jsonify(fdb.appointment_to_dict(appointment)), 201
 
     @app.get("/api/appointments")
     @token_required
@@ -1260,15 +1169,12 @@ EV Cars Team
         Returns:
             JSON: Array of appointment objects
         """
-        appointments = Appointment.query.order_by(
-            Appointment.appointment_date.asc(),
-            Appointment.appointment_time.asc()
-        ).all()
-        return jsonify([apt.to_dict() for apt in appointments])
+        appointments = fdb.get_all_appointments()
+        return jsonify([fdb.appointment_to_dict(apt) for apt in appointments])
 
-    @app.put("/api/appointments/<int:appointment_id>/status")
+    @app.put("/api/appointments/<appointment_id>/status")
     @token_required
-    def api_appointment_update_status(appointment_id: int):
+    def api_appointment_update_status(appointment_id: str):
         """
         Update appointment status (complete or cancel).
         
@@ -1278,7 +1184,7 @@ EV Cars Team
         Returns:
             JSON: Updated appointment object
         """
-        appointment = Appointment.query.get(appointment_id)
+        appointment = fdb.get_appointment_by_id(appointment_id)
         if not appointment:
             return jsonify({"error": "Appointment not found"}), 404
         
@@ -1288,10 +1194,8 @@ EV Cars Team
         if new_status not in ["scheduled", "completed", "cancelled"]:
             return jsonify({"error": "Invalid status"}), 400
         
-        appointment.status = new_status
-        db.session.commit()
-        
-        return jsonify(appointment.to_dict())
+        updated = fdb.update_appointment_status(appointment_id, new_status)
+        return jsonify(fdb.appointment_to_dict(updated))
 
     return app
 
@@ -1315,19 +1219,15 @@ def seed_admin_if_missing():
     that includes salting to prevent rainbow table attacks.
     """
     # Check if admin already exists to avoid duplicates
-    existing = Admin.query.filter_by(username="admin").first()
-    if existing:
+    if fdb.admin_exists("admin"):
         return
     
     # Create new admin with hashed password
-    admin = Admin(
+    fdb.create_admin(
         username="admin",
         password_hash=generate_password_hash("admin123")
     )
-    
-    # Add to session and commit to database
-    db.session.add(admin)
-    db.session.commit()
+    print("[FIREBASE] Created default admin user")
 
 
 app = create_app()

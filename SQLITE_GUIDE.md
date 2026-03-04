@@ -2,6 +2,40 @@
 
 This guide explains how to query the SQLite database used in this EV Cars application.
 
+## Installing SQLite
+
+### macOS
+SQLite comes pre-installed on macOS. Verify by running:
+```bash
+sqlite3 --version
+```
+
+### Windows
+1. Download SQLite from https://www.sqlite.org/download.html
+2. Download the **sqlite-tools-win-x64** zip file
+3. Extract the zip file to a folder (e.g., `C:\sqlite`)
+4. Add the folder to your system PATH:
+   - Search "Environment Variables" in Windows
+   - Edit the `Path` variable under System Variables
+   - Add `C:\sqlite` (or your chosen folder)
+5. Restart your terminal and verify:
+   ```bash
+   sqlite3 --version
+   ```
+
+### Linux (Ubuntu/Debian)
+```bash
+sudo apt update
+sudo apt install sqlite3
+sqlite3 --version
+```
+
+### Linux (Fedora/RHEL)
+```bash
+sudo dnf install sqlite
+sqlite3 --version
+```
+
 ## Database Location
 
 The database file is `ev_cars.db` located in the `backend/` directory.

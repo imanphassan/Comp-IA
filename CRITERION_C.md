@@ -2,7 +2,7 @@
 
 ## Complexities Used in Developing the Website
 
-1. [Connection to SQLite Database](#1-connection-to-sqlite-database)
+1. [Firebase Firestore Database](#1-firebase-firestore-database)
 2. [JWT Authentication System](#2-jwt-authentication-system)
 3. [Password Hashing and Security](#3-password-hashing-and-security)
 4. [Admin Login Page](#4-admin-login-page)
@@ -20,59 +20,210 @@
 
 ---
 
-## 1. Connection to SQLite Database
+## 1. Firebase Firestore Database
 
-The application uses SQLAlchemy ORM (Object-Relational Mapping) to interact with a SQLite database. This allows us to work with Python classes instead of raw SQL queries.
+The application uses Firebase Firestore as its database, a cloud-hosted NoSQL document database. This provides automatic scaling, real-time capabilities, and eliminates the need for local database management.
 
-### Database Models (`backend/models.py`)
+### Firebase Initialization (`backend/firebase_db.py`)
 
 ```python
-from flask_sqlalchemy import SQLAlchemy
+import firebase_admin
+from firebase_admin import credentials, firestore
 
-db = SQLAlchemy()
+def initialize_firebase():
+    """
+    Initialize Firebase Admin SDK with service account credentials.
+    Checks if already initialized to prevent errors during hot reload.
+    """
+    if not firebase_admin._apps:
+        cred_path = os.path.join(os.path.dirname(__file__), 'firebase-credentials.json')
+        cred = credentials.Certificate(cred_path)
+        firebase_admin.initialize_app(cred)
+    
+    return firestore.client()
 
-class Admin(db.Model):
-    __tablename__ = "admin"
-    admin_id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-
-class Car(db.Model):
-    __tablename__ = "car"
-    car_id = db.Column(db.Integer, primary_key=True)
-    model = db.Column(db.String(120), nullable=False)
-    year = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=False)
-    range_km = db.Column(db.Integer, nullable=False)
-    charge_time_min = db.Column(db.Integer, nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    image_url = db.Column(db.Text, nullable=False)
+# Initialize Firestore client
+db = initialize_firebase()
 ```
 
 | Component | Explanation |
 |-----------|-------------|
-| `db = SQLAlchemy()` | Initializes the ORM instance that will be connected to Flask |
-| `__tablename__` | Explicitly sets the table name in the database |
-| `db.Column()` | Defines a column with type, constraints (primary_key, unique, nullable) |
-| `db.Integer`, `db.String`, `db.Text`, `db.Float` | SQLAlchemy data types mapping to SQLite types |
+| `firebase_admin` | Official Firebase Admin SDK for Python |
+| `credentials.Certificate()` | Loads service account key for authentication |
+| `firebase_admin._apps` | Check prevents re-initialization errors |
+| `firestore.client()` | Returns Firestore database client instance |
 
-### Database Initialization (`backend/api.py`)
+### Firestore Collections (NoSQL Structure)
+
+Unlike SQLite's relational tables, Firestore uses collections and documents:
+
+| SQLite Table | Firestore Collection | Document ID |
+|--------------|---------------------|-------------|
+| `admin` | `admins` | Auto-generated string |
+| `customer` | `customers` | Auto-generated string |
+| `car` | `cars` | Auto-generated string |
+| `lead` | `leads` | Auto-generated string |
+| `appointment` | `appointments` | Auto-generated string |
+| `saved_car` | `saved_cars` | Auto-generated string |
+
+### CRUD Operations with Firestore (`backend/firebase_db.py`)
 
 ```python
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///ev_site.db"
-db.init_app(app)
+def create_car(model: str, year: int, price: float, range_km: int, 
+               charge_time_min: int, description: str, image_url: str):
+    """
+    Create a new car listing in Firestore.
+    """
+    car_data = {
+        'model': model,
+        'year': year,
+        'price': price,
+        'range_km': range_km,
+        'charge_time_min': charge_time_min,
+        'description': description,
+        'image_url': image_url,
+        'status': 'available',
+        'sale_price': None,
+        'sold_date': None,
+    }
+    
+    # Add document to collection - returns (timestamp, document_reference)
+    doc_ref = db.collection('cars').add(car_data)
+    car_data['car_id'] = doc_ref[1].id  # Get auto-generated ID
+    return car_data
 
-with app.app_context():
-    db.create_all()
-    seed_admin_if_missing()
+
+def get_car_by_id(car_id: str):
+    """
+    Get a car by its Firestore document ID.
+    """
+    doc = db.collection('cars').document(car_id).get()
+    if not doc.exists:
+        return None
+    
+    data = doc.to_dict()
+    data['car_id'] = doc.id
+    return data
+
+
+def update_car(car_id: str, **kwargs):
+    """
+    Update a car's fields using keyword arguments.
+    """
+    doc_ref = db.collection('cars').document(car_id)
+    doc_ref.update(kwargs)
+    return get_car_by_id(car_id)
+
+
+def delete_car(car_id: str):
+    """
+    Delete a car and its related records.
+    """
+    # Delete related leads
+    leads = db.collection('leads').where('car_id', '==', car_id).stream()
+    for lead in leads:
+        lead.reference.delete()
+    
+    # Delete the car document
+    db.collection('cars').document(car_id).delete()
+    return True
 ```
 
-| Line | Explanation |
-|------|-------------|
-| `SQLALCHEMY_DATABASE_URI` | Connection string pointing to SQLite file |
-| `db.init_app(app)` | Connects SQLAlchemy to the Flask application |
-| `app.app_context()` | Creates application context for database operations |
-| `db.create_all()` | Creates all tables defined in models if they don't exist |
+| Operation | SQLAlchemy | Firestore |
+|-----------|------------|----------|
+| Create | `db.session.add(car)` | `db.collection('cars').add(data)` |
+| Read | `Car.query.get(id)` | `db.collection('cars').document(id).get()` |
+| Update | `car.model = "new"; db.session.commit()` | `doc_ref.update({'model': 'new'})` |
+| Delete | `db.session.delete(car)` | `doc_ref.delete()` |
+
+### Querying with Filters
+
+```python
+def get_all_cars(budget: float = None, min_range: int = None):
+    """
+    Get all cars with optional filtering.
+    Firestore has limitations on compound queries, so we filter in Python.
+    """
+    cars_ref = db.collection('cars')
+    cars = []
+    
+    for doc in cars_ref.stream():
+        car = doc.to_dict()
+        car['car_id'] = doc.id
+        
+        # Apply filters in Python
+        if budget is not None and car.get('price', 0) > budget:
+            continue
+        if min_range is not None and car.get('range_km', 0) < min_range:
+            continue
+        
+        cars.append(car)
+    
+    # Sort by price ascending
+    cars.sort(key=lambda x: x.get('price', 0))
+    return cars
+
+
+def get_booked_slots(date_str: str):
+    """
+    Get all booked time slots for a given date.
+    Uses Firestore's where() for filtering.
+    """
+    appointments_ref = db.collection('appointments')
+    query = appointments_ref.where('appointment_date', '==', date_str)\
+                           .where('status', '==', 'scheduled')
+    
+    booked_times = set()
+    for doc in query.stream():
+        apt = doc.to_dict()
+        booked_times.add(apt.get('appointment_time'))
+    
+    return booked_times
+```
+
+### Denormalization Pattern
+
+In NoSQL databases, we store related data directly in documents to avoid multiple queries:
+
+```python
+def create_lead(name: str, email: str, car_id: str, message: str = None):
+    """
+    Create a new lead with denormalized car data.
+    """
+    # Get car info for denormalization
+    car = get_car_by_id(car_id)
+    car_model = car.get('model') if car else None
+    
+    lead_data = {
+        'name': name,
+        'email': email,
+        'message': message,
+        'car_id': car_id,
+        'car_model': car_model,  # Stored directly - no JOIN needed
+        'created_at': datetime.now(timezone.utc),
+    }
+    
+    doc_ref = db.collection('leads').add(lead_data)
+    lead_data['lead_id'] = doc_ref[1].id
+    return lead_data
+```
+
+| Algorithmic Thinking | Explanation |
+|---------------------|-------------|
+| **Denormalization** | Store `car_model` directly in leads/appointments for faster reads |
+| **Document References** | Store `car_id` as string reference instead of foreign key |
+| **No JOINs** | Related data embedded in document eliminates need for table joins |
+| **Trade-off** | Faster reads, but data may become stale if car model changes |
+
+### Why Firestore?
+
+| Feature | Benefit |
+|---------|--------|
+| **Cloud-hosted** | No local database setup or maintenance required |
+| **Auto-scaling** | Handles traffic spikes automatically |
+| **Flexible schema** | Documents can have different fields without migrations |
+| **Real-time listeners** | Data updates can sync instantly to clients |
+| **Auto-generated IDs** | Unique string IDs prevent collisions |
 
 ---
 
@@ -956,7 +1107,8 @@ useEffect(() => {
 | Category | Technologies |
 |----------|--------------|
 | **Frontend** | React 18, Vite, Tailwind CSS, React Router, Axios, Leaflet, Chart.js |
-| **Backend** | Python 3, Flask, SQLAlchemy, SQLite, PyJWT |
+| **Backend** | Python 3, Flask, PyJWT, Werkzeug |
+| **Database** | Firebase Firestore (NoSQL, cloud-hosted) |
 | **Authentication** | JWT tokens, Werkzeug password hashing |
 | **Development** | npm, pip, Git |
 

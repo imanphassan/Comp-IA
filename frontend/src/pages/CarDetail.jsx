@@ -53,7 +53,7 @@ export default function CarDetail() {
           headers: { Authorization: `Bearer ${token}` }
         })
         const savedCarIds = res.data.map(s => s.car_id)
-        setInGarage(savedCarIds.includes(parseInt(carId)))
+        setInGarage(savedCarIds.includes(carId))
       } catch (err) {
         console.error('Failed to check garage:', err)
         setInGarage(false)
@@ -71,16 +71,14 @@ export default function CarDetail() {
     const token = localStorage.getItem('customerToken')
     if (!isAuthenticated || !token) return
     
-    const carIdInt = parseInt(carId)
-    
     try {
       if (inGarage) {
-        await api.delete(`/customer/garage/${carIdInt}`, {
+        await api.delete(`/customer/garage/${carId}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
         setInGarage(false)
       } else {
-        await api.post(`/customer/garage/${carIdInt}`, {}, {
+        await api.post(`/customer/garage/${carId}`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         })
         setInGarage(true)

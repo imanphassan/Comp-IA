@@ -21,3 +21,8 @@ frontend/dist/
 .DS_Store
 
 criterion/
+
+# Firebase
+backend/firebase-credentials.json
+firebase-credentials.json
+*-firebase-adminsdk-*.json
