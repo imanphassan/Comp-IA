@@ -415,55 +415,9 @@ useEffect(() => {
 ---
 
 ## 8. EV Advisor Chatbot
-
-The chatbot uses keyword matching to identify user intent and return relevant responses.
-
-### Intent Matching Algorithm (`backend/chatbot.py`)
-
-```python
-INTENTS = {
-    "range": {
-        "keywords": ["range", "km", "kilometre", "kilometer", "distance"],
-        "responses": [
-            "Range depends on battery size, driving style and temperature...",
-        ],
-    },
-    "charging": {
-        "keywords": ["charge", "charging", "charger", "fast", "dc", "ac"],
-        "responses": [
-            "Charging time depends on charger type and the car charging curve...",
-        ],
-    },
-    # ... more intents
-}
-
-def normalise(text: str) -> str:
-    return " ".join(text.lower().strip().split())
-
-def match_intent(message: str) -> Tuple[str, str]:
-    msg = normalise(message)
-    for intent, data in INTENTS.items():
-        for kw in data["keywords"]:
-            if kw in msg:
-                return intent, data["responses"][0]
-    
-    fallback = "I did not understand that. You can ask about range, charging, battery health."
-    return "fallback", fallback
-```
-
-| Component | Explanation |
-|-----------|-------------|
-| `INTENTS` dictionary | Maps intent names to keywords and responses |
-| `normalise()` | Converts to lowercase, removes extra whitespace |
-| Keyword matching | Checks if any keyword appears in the message |
-| First match wins | Returns immediately when a keyword is found |
-| Fallback response | Guides user when no intent matches |
-
-### Car Recommendation Algorithm
-
 The chatbot includes a recommendation engine that queries the database and scores cars based on user preferences. This demonstrates algorithmic thinking through entity extraction, weighted scoring, and ranking.
 
-#### Entity Extraction (`backend/chatbot.py`)
+### Entity Extraction (`backend/chatbot.py`)
 
 ```python
 @dataclass
@@ -521,7 +475,7 @@ def extract_criteria(message: str) -> UserCriteria:
 | `re.search()` | Finds first match of pattern in string |
 | `match.group(1)` | Extracts the captured number from the pattern |
 
-#### Weighted Scoring Algorithm
+### Weighted Scoring Algorithm
 
 ```python
 def score_car(car, criteria: UserCriteria, max_range: int, min_charge: int, max_price: float) -> float:
