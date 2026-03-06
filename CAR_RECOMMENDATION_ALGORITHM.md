@@ -23,39 +23,60 @@ The chatbot looks for keywords in the user's message to understand what they wan
 
 | Preference | Example Phrases | What It Extracts |
 |------------|-----------------|------------------|
-| **Budget** | "budget 80000", "under 100k AED" | Maximum price |
+| **Max Budget** | "budget 80000", "under 100k AED" | Maximum price |
+| **Min Budget** | "above 50000", "over 60k" | Minimum price |
+| **Price Range** | "between 50000 and 100000", "from 60k to 120k" | Min and max price |
 | **Range** | "300 km range", "at least 400 km" | Minimum range |
-| **Charge Time** | "charge in 30 minutes" | Maximum charge time |
+| **Charge Time** | "charge in 30 minutes", "less than 20 min" | Maximum charge time |
 
 ### How It Works
 
 ```
-User says: "I need a car with budget 80000 AED and 300 km range"
+User says: "I need a car between 50000 and 100000 AED with 300 km range"
 
 Extracted preferences:
-  - Budget: 80,000 AED
+  - Min Budget: 50,000 AED
+  - Max Budget: 100,000 AED
   - Minimum Range: 300 km
   - Charge Time: Not specified
 ```
 
-The chatbot uses **pattern matching** (regular expressions) to find numbers next to keywords like "budget", "km", or "minutes".
+The chatbot uses **pattern matching** (regular expressions) to find numbers next to keywords like "budget", "between", "km", or "minutes".
 
 ---
 
-## Step 2: Filter Cars by Budget
+## Step 2: Filter Cars by Criteria
 
-Before scoring, the algorithm removes cars that are too expensive.
+Before scoring, the algorithm removes cars that don't meet the user's requirements.
+
+### Filters Applied
+
+| Criteria | Filter Rule |
+|----------|-------------|
+| **Max Budget** | Car price ≤ max budget |
+| **Min Budget** | Car price ≥ min budget |
+| **Range** | Car range ≥ minimum range |
+| **Charge Time** | Car charge time ≤ maximum charge time |
+
+### Example
 
 ```
-Budget: 80,000 AED
+User: "Recommend a car between 50000 and 100000 AED, above 400 km range, less than 30 min charge"
+
+Extracted:
+  - Min Budget: 50,000 AED
+  - Max Budget: 100,000 AED
+  - Min Range: 400 km
+  - Max Charge Time: 30 minutes
 
 Cars in database:
-  - Tesla Model 3: 75,000 AED ✓ (within budget)
-  - BMW iX: 95,000 AED ✓ (within 20% buffer)
-  - Porsche Taycan: 150,000 AED ✗ (too expensive)
+  - Tesla Model 3: 75,000 AED, 450 km, 25 min ✓ (passes all)
+  - BMW iX: 95,000 AED, 380 km, 28 min ✗ (range too low)
+  - Hyundai Ioniq: 45,000 AED, 420 km, 25 min ✗ (under min budget)
+  - Porsche Taycan: 150,000 AED, 500 km, 20 min ✗ (over max budget)
 ```
 
-**Why 20% buffer?** Sometimes a slightly more expensive car is a much better match. The algorithm keeps cars up to 20% over budget so users don't miss great options.
+Only cars that pass **all** filters proceed to scoring.
 
 ---
 
@@ -209,6 +230,74 @@ of range, and charges in 25 minutes."
 
 ---
 
+## Example Queries
+
+Here are example queries the chatbot understands:
+
+### Budget Queries
+
+| Query | What It Extracts |
+|-------|------------------|
+| "Recommend a car with budget 80000 AED" | Max: 80,000 |
+| "Find me a car under 100k" | Max: 100,000 |
+| "I want a car above 50000" | Min: 50,000 |
+| "Show me cars between 60000 and 120000 AED" | Min: 60,000, Max: 120,000 |
+| "Cars from 50k to 100k" | Min: 50,000, Max: 100,000 |
+
+### Range Queries
+
+| Query | What It Extracts |
+|-------|------------------|
+| "I need at least 400 km range" | Min Range: 400 km |
+| "Car with 500 km range" | Min Range: 500 km |
+| "Minimum range 350 km" | Min Range: 350 km |
+
+### Charge Time Queries
+
+| Query | What It Extracts |
+|-------|------------------|
+| "Charges in 30 minutes" | Max Charge: 30 min |
+| "Fast charging under 20 min" | Max Charge: 20 min |
+| "Less than 45 minute charge" | Max Charge: 45 min |
+
+### Combined Queries
+
+| Query | What It Extracts |
+|-------|------------------|
+| "Recommend a car between 50000 and 100000 AED with 400 km range" | Min: 50,000, Max: 100,000, Range: 400 km |
+| "Find me a car under 80k that charges in 30 minutes" | Max: 80,000, Charge: 30 min |
+| "I need a car with budget 100000, at least 500 km range, and fast charging under 25 min" | Max: 100,000, Range: 500 km, Charge: 25 min |
+
+---
+
+## Follow-Up Queries
+
+The chatbot also recognizes follow-up questions that mention prices or budgets:
+
+| Follow-Up Query | What Happens |
+|-----------------|--------------|
+| "What about 60000 AED?" | Treats as recommendation request with budget 60,000 |
+| "How about 80k?" | Treats as recommendation request with budget 80,000 |
+| "Budget 50000" | Treats as recommendation request with budget 50,000 |
+| "Price 70000 AED" | Treats as recommendation request with budget 70,000 |
+
+### Example Conversation
+
+```
+User: "Recommend a car with budget 100000 AED"
+Bot: "I would recommend the 2024 Tesla Model 3 based on your budget of 100,000 AED..."
+
+User: "What about 60000 AED?"
+Bot: "I would recommend the 2024 Hyundai Ioniq based on your budget of 60,000 AED..."
+
+User: "How about between 70000 and 90000?"
+Bot: "I would recommend the 2024 BYD Seal based on your price range of 70,000 to 90,000 AED..."
+```
+
+**Note:** The chatbot processes each message independently - it doesn't remember previous messages. Follow-up queries work because they contain budget/price information that triggers the recommendation algorithm.
+
+---
+
 ## Key Concepts Used
 
 | Concept | How It's Used |
@@ -217,4 +306,4 @@ of range, and charges in 25 minutes."
 | **Normalization** | Scores are scaled 0-100 for fair comparison |
 | **Weighted Scoring** | Different factors have different importance |
 | **Sorting** | Cars are ranked by score to find the best |
-| **Filtering** | Budget filter removes irrelevant options early |
+| **Filtering** | Budget/range/charge filters remove irrelevant options early |

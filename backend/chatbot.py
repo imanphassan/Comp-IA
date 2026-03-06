@@ -111,14 +111,16 @@ FALLBACK_CATEGORIES: List[str] = ["range", "charging", "battery health", "recomm
 @dataclass
 class UserCriteria:
     """
-    Data class to hold extracted user preferences.
+    Data class to hold extracted user preferences for car recommendations.
     
     Attributes:
         budget: Maximum price in AED (None if not specified)
+        min_budget: Minimum price in AED (None if not specified)
         min_range: Minimum desired range in km (None if not specified)
         max_charge_time: Maximum acceptable charge time in minutes (None if not specified)
     """
-    budget: Optional[float] = None
+    budget: Optional[float] = None        # max price
+    min_budget: Optional[float] = None    # min price
     min_range: Optional[int] = None
     max_charge_time: Optional[int] = None
 
@@ -148,24 +150,64 @@ def extract_criteria(message: str) -> UserCriteria:
     criteria = UserCriteria()
     
     # ─────────────────────────────────────────────────────────────────────────
-    # BUDGET EXTRACTION
-    # Patterns: "budget 80000", "80000 aed", "under 100k", "100,000 dirhams"
+    # BUDGET EXTRACTION (supports price ranges)
+    # Patterns: "budget 80000", "under 100k", "between 50000 and 100000"
     # ─────────────────────────────────────────────────────────────────────────
-    budget_patterns = [
-        r'budget\s*(?:of\s*)?([\d,]+)\s*k?',           # "budget 80000" or "budget 80k"
-        r'([\d,]+)\s*k?\s*(?:aed|dirham)',              # "80000 AED" or "80k dirhams"
-        r'under\s*([\d,]+)\s*k?',                       # "under 100000" or "under 100k"
-        r'max(?:imum)?\s*(?:price)?\s*([\d,]+)\s*k?',  # "max 80000" or "maximum price 80k"
+    
+    # First check for price range patterns (e.g., "between 50000 and 100000")
+    range_price_patterns = [
+        r'between\s*([\d,]+)\s*k?\s*(?:and|to|-)\s*([\d,]+)\s*k?',  # "between 50000 and 100000"
+        r'([\d,]+)\s*k?\s*(?:to|-)\s*([\d,]+)\s*k?\s*(?:aed|dirham)?',  # "50000 to 100000 AED"
+        r'from\s*([\d,]+)\s*k?\s*(?:to|-)\s*([\d,]+)\s*k?',  # "from 50k to 100k"
     ]
-    for pattern in budget_patterns:
+    for pattern in range_price_patterns:
         match = re.search(pattern, msg)
         if match:
-            value = match.group(1).replace(',', '')
-            criteria.budget = float(value)
-            # Handle "k" suffix (e.g., "80k" = 80000)
-            if 'k' in msg[match.start():match.end()+2].lower() and criteria.budget < 1000:
-                criteria.budget *= 1000
+            min_val = float(match.group(1).replace(',', ''))
+            max_val = float(match.group(2).replace(',', ''))
+            # Handle "k" suffix
+            if min_val < 1000 and 'k' in msg[match.start():match.end()].lower():
+                min_val *= 1000
+            if max_val < 1000 and 'k' in msg[match.start():match.end()].lower():
+                max_val *= 1000
+            criteria.min_budget = min_val
+            criteria.budget = max_val
             break
+    
+    # If no range found, check for single budget patterns
+    if criteria.budget is None:
+        budget_patterns = [
+            r'budget\s*(?:of\s*)?([\d,]+)\s*k?',           # "budget 80000" or "budget 80k"
+            r'([\d,]+)\s*k?\s*(?:aed|dirham)',              # "80000 AED" or "80k dirhams"
+            r'under\s*([\d,]+)\s*k?',                       # "under 100000" or "under 100k"
+            r'max(?:imum)?\s*(?:price)?\s*([\d,]+)\s*k?',  # "max 80000" or "maximum price 80k"
+        ]
+        for pattern in budget_patterns:
+            match = re.search(pattern, msg)
+            if match:
+                value = match.group(1).replace(',', '')
+                criteria.budget = float(value)
+                # Handle "k" suffix (e.g., "80k" = 80000)
+                if 'k' in msg[match.start():match.end()+2].lower() and criteria.budget < 1000:
+                    criteria.budget *= 1000
+                break
+    
+    # Check for minimum price patterns (e.g., "above 50000", "at least 60k")
+    if criteria.min_budget is None:
+        min_price_patterns = [
+            r'above\s*([\d,]+)\s*k?\s*(?:aed|dirham)?',     # "above 50000"
+            r'over\s*([\d,]+)\s*k?\s*(?:aed|dirham)?',      # "over 50000"
+            r'at\s*least\s*([\d,]+)\s*k?\s*(?:aed|dirham)?', # "at least 60k"
+            r'min(?:imum)?\s*(?:price)?\s*([\d,]+)\s*k?',   # "min 50000"
+        ]
+        for pattern in min_price_patterns:
+            match = re.search(pattern, msg)
+            if match:
+                value = match.group(1).replace(',', '')
+                criteria.min_budget = float(value)
+                if 'k' in msg[match.start():match.end()+2].lower() and criteria.min_budget < 1000:
+                    criteria.min_budget *= 1000
+                break
     
     # ─────────────────────────────────────────────────────────────────────────
     # RANGE EXTRACTION
@@ -292,17 +334,29 @@ def recommend_cars(cars: list, criteria: UserCriteria, top_n: int = 3) -> List[d
         return []
     
     # ─────────────────────────────────────────────────────────────────────────
-    # STEP 1: Filter by budget (soft filter - keep some over-budget for comparison)
+    # STEP 1: Filter by all criteria (strict filtering)
     # ─────────────────────────────────────────────────────────────────────────
+    filtered_cars = cars
+    
+    # Filter by maximum budget (e.g., "under 100000")
     if criteria.budget:
-        # Keep cars within 20% over budget for flexibility
-        budget_limit = criteria.budget * 1.2
-        filtered_cars = [c for c in cars if c.price <= budget_limit]
-        # If too few results, use all cars
-        if len(filtered_cars) < top_n:
-            filtered_cars = cars
-    else:
-        filtered_cars = cars
+        filtered_cars = [c for c in filtered_cars if c.price <= criteria.budget]
+    
+    # Filter by minimum budget (e.g., "above 50000", "between 50000 and 100000")
+    if criteria.min_budget:
+        filtered_cars = [c for c in filtered_cars if c.price >= criteria.min_budget]
+    
+    # Filter by minimum range (e.g., "above 500 km range")
+    if criteria.min_range:
+        filtered_cars = [c for c in filtered_cars if c.range_km >= criteria.min_range]
+    
+    # Filter by maximum charge time (e.g., "less than 10 mins charge")
+    if criteria.max_charge_time:
+        filtered_cars = [c for c in filtered_cars if c.charge_time_min <= criteria.max_charge_time]
+    
+    # If no cars match all criteria, return empty
+    if not filtered_cars:
+        return []
     
     # ─────────────────────────────────────────────────────────────────────────
     # STEP 2: Calculate normalization values
@@ -363,8 +417,12 @@ def format_recommendations(recommendations: List[dict], criteria: UserCriteria) 
     
     # Build preference context
     pref_parts = []
-    if criteria.budget:
+    if criteria.min_budget and criteria.budget:
+        pref_parts.append(f"price range of {int(criteria.min_budget):,} to {int(criteria.budget):,} AED")
+    elif criteria.budget:
         pref_parts.append(f"budget of {int(criteria.budget):,} AED")
+    elif criteria.min_budget:
+        pref_parts.append(f"minimum price of {int(criteria.min_budget):,} AED")
     if criteria.min_range:
         pref_parts.append(f"minimum {criteria.min_range} km range")
     if criteria.max_charge_time:
@@ -386,6 +444,9 @@ def is_recommendation_request(message: str) -> bool:
     """
     Check if the user is asking for car recommendations.
     
+    Also detects follow-up questions that mention budget/price/range,
+    treating them as implicit recommendation requests.
+    
     Args:
         message: User's input message
         
@@ -393,12 +454,33 @@ def is_recommendation_request(message: str) -> bool:
         bool: True if user wants recommendations
     """
     msg = message.lower()
+    
+    # Explicit recommendation keywords
     recommendation_keywords = [
         "recommend", "suggestion", "suggest", "find me", "show me",
         "what car", "which car", "best car", "looking for", "i need",
         "i want", "help me find", "help me choose"
     ]
-    return any(kw in msg for kw in recommendation_keywords)
+    
+    if any(kw in msg for kw in recommendation_keywords):
+        return True
+    
+    # Implicit recommendation: mentions budget/price/range with a number
+    # This handles follow-up questions like "What about 60000 AED?" or "budget 80k?"
+    import re
+    implicit_patterns = [
+        r'(?:budget|price|cost)\s*(?:of\s*)?\d',  # "budget 60000", "price of 80000"
+        r'\d[\d,]*\s*(?:aed|dirham)',              # "60000 AED", "80,000 dirhams"
+        r'what\s*about\s*\d',                      # "what about 60000"
+        r'how\s*about\s*\d',                       # "how about 80000"
+        r'\d+\s*k\s*(?:aed|budget|price)?',        # "60k", "80k AED"
+    ]
+    
+    for pattern in implicit_patterns:
+        if re.search(pattern, msg):
+            return True
+    
+    return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
