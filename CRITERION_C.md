@@ -574,7 +574,8 @@ The chatbot includes a recommendation engine that queries the database and score
 @dataclass
 class UserCriteria:
     """Data class to hold extracted user preferences."""
-    budget: Optional[float] = None
+    budget: Optional[float] = None        # max price
+    min_budget: Optional[float] = None    # min price (for price ranges)
     min_range: Optional[int] = None
     max_charge_time: Optional[int] = None
 
@@ -582,39 +583,46 @@ class UserCriteria:
 def extract_criteria(message: str) -> UserCriteria:
     """
     Extract numerical criteria from user message using regex patterns.
-    
-    Algorithm:
-    1. Normalize input to lowercase
-    2. Apply regex patterns for each criterion type
-    3. Extract and convert numerical values
-    4. Return structured UserCriteria object
+    Supports price ranges like "between 50000 and 100000 AED".
     """
     msg = message.lower()
     criteria = UserCriteria()
     
-    # Budget patterns: "budget 80000", "80000 AED", "under 100k"
-    budget_patterns = [
-        r'budget\s*(?:of\s*)?([\d,]+)\s*k?',
-        r'([\d,]+)\s*k?\s*(?:aed|dirham)',
-        r'under\s*([\d,]+)\s*k?',
+    # Price range patterns: "between 50000 and 100000", "from 60k to 120k"
+    range_price_patterns = [
+        r'between\s*([\d,]+)\s*k?\s*(?:and|to|-)\s*([\d,]+)\s*k?',
+        r'([\d,]+)\s*k?\s*(?:to|-)\s*([\d,]+)\s*k?\s*(?:aed|dirham)?',
     ]
-    for pattern in budget_patterns:
+    for pattern in range_price_patterns:
         match = re.search(pattern, msg)
         if match:
-            value = match.group(1).replace(',', '')
-            criteria.budget = float(value)
+            criteria.min_budget = float(match.group(1).replace(',', ''))
+            criteria.budget = float(match.group(2).replace(',', ''))
             break
     
-    # Range patterns: "300 km", "range 400"
-    range_patterns = [
-        r'([\d]+)\s*(?:km|kilometer|kilometre)',
-        r'range\s*(?:of\s*)?([\d]+)',
-    ]
-    for pattern in range_patterns:
-        match = re.search(pattern, msg)
-        if match:
-            criteria.min_range = int(match.group(1))
-            break
+    # Single budget patterns: "budget 80000", "under 100k"
+    if criteria.budget is None:
+        budget_patterns = [
+            r'budget\s*(?:of\s*)?([\d,]+)\s*k?',
+            r'under\s*([\d,]+)\s*k?',
+        ]
+        for pattern in budget_patterns:
+            match = re.search(pattern, msg)
+            if match:
+                criteria.budget = float(match.group(1).replace(',', ''))
+                break
+    
+    # Min price patterns: "above 50000", "over 60k"
+    if criteria.min_budget is None:
+        min_price_patterns = [
+            r'above\s*([\d,]+)\s*k?',
+            r'over\s*([\d,]+)\s*k?',
+        ]
+        for pattern in min_price_patterns:
+            match = re.search(pattern, msg)
+            if match:
+                criteria.min_budget = float(match.group(1).replace(',', ''))
+                break
     
     return criteria
 ```
@@ -622,9 +630,9 @@ def extract_criteria(message: str) -> UserCriteria:
 | Component | Explanation |
 |-----------|-------------|
 | `@dataclass` | Python data class for structured criteria storage |
-| Regex patterns | Multiple patterns to match different phrasings |
+| `min_budget` | New field for price range support (minimum price) |
+| Price range patterns | Extracts both min and max from "between X and Y" |
 | `re.search()` | Finds first match of pattern in string |
-| `match.group(1)` | Extracts the captured number from the pattern |
 
 ### Weighted Scoring Algorithm
 
@@ -677,20 +685,26 @@ def recommend_cars(cars: list, criteria: UserCriteria, top_n: int = 3) -> List[d
     Recommend top N cars based on user criteria.
     
     Algorithm:
-    1. Filter out cars over budget (soft filter - keep 20% buffer)
-    2. Calculate normalization values from available inventory
+    1. Filter by all criteria (strict filtering)
+    2. Calculate normalization values from filtered inventory
     3. Score each car using the weighted scoring algorithm
     4. Sort by score descending
     5. Return top N results
     """
-    # Step 1: Filter by budget with 20% flexibility
+    filtered_cars = cars
+    
+    # Step 1: Strict filtering by all criteria
     if criteria.budget:
-        budget_limit = criteria.budget * 1.2
-        filtered_cars = [c for c in cars if c.price <= budget_limit]
-        if len(filtered_cars) < top_n:
-            filtered_cars = cars  # Fall back to all cars if too few
-    else:
-        filtered_cars = cars
+        filtered_cars = [c for c in filtered_cars if c.price <= criteria.budget]
+    if criteria.min_budget:
+        filtered_cars = [c for c in filtered_cars if c.price >= criteria.min_budget]
+    if criteria.min_range:
+        filtered_cars = [c for c in filtered_cars if c.range_km >= criteria.min_range]
+    if criteria.max_charge_time:
+        filtered_cars = [c for c in filtered_cars if c.charge_time_min <= criteria.max_charge_time]
+    
+    if not filtered_cars:
+        return []  # No cars match criteria
     
     # Step 2: Calculate normalization values
     max_range = max(c.range_km for c in filtered_cars)
@@ -718,18 +732,18 @@ def api_chatbot():
     data = request.get_json() or {}
     message = (data.get("message") or "").strip()
     
-    # Check for recommendation request
+    # Check for recommendation request (includes follow-up queries)
     if is_recommendation_request(message):
         # Step 1: Extract criteria from user message
         criteria = extract_criteria(message)
         
-        # Step 2: Query database for available cars
-        available_cars = Car.query.filter_by(status='available').all()
+        # Step 2: Query database for available cars (Firebase)
+        available_cars = fdb.get_available_cars()
         
         # Step 3: Run recommendation algorithm
         recommendations = recommend_cars(available_cars, criteria, top_n=3)
         
-        # Step 4: Format response
+        # Step 4: Format response (returns single best car)
         reply = format_recommendations(recommendations, criteria)
         
         return jsonify({
