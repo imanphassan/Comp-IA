@@ -11,7 +11,7 @@
 7. [Client-Side Filtering and Sorting](#7-client-side-filtering-and-sorting)
 8. [EV Advisor Chatbot](#8-ev-advisor-chatbot)
 9. [React Context for State Management](#9-react-context-for-state-management)
-10. [Interactive Charging Station Map](#10-interactive-charging-station-map)
+10. [Interactive EV Dealership Map](#10-interactive-ev-dealership-map)
 11. [Revenue & Analytics Dashboard](#11-revenue--analytics-dashboard)
 12. [Customer Lead Management](#12-customer-lead-management)
 13. [Appointment Scheduling System](#13-appointment-scheduling-system)
@@ -818,9 +818,9 @@ export function useAuth() {
 
 ---
 
-## 10. Interactive Charging Station Map
+## 10. Interactive EV Dealership Map
 
-The map page displays EV charging stations using Leaflet.
+The map page displays EV car dealerships using Leaflet.
 
 ### Map Implementation (`frontend/src/pages/Map.jsx`)
 
@@ -828,9 +828,9 @@ The map page displays EV charging stations using Leaflet.
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 
-const stations = [
-  { id: 1, name: "DEWA Charging - Dubai Mall", lat: 25.1972, lng: 55.2796, type: "fast", power: "50 kW DC" },
-  // ... more stations
+const dealerships = [
+  { id: 1, name: "Tesla Dubai - Sheikh Zayed Road", lat: 25.2285, lng: 55.2842, type: "tesla", brands: "Tesla" },
+  // ... more dealerships
 ]
 
 const createIcon = (color) => L.divIcon({
@@ -846,16 +846,16 @@ export default function Map() {
       <TileLayer
         url="https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}{r}.png"
       />
-      {stations.map((station) => (
+      {dealerships.map((dealership) => (
         <Marker
-          key={station.id}
-          position={[station.lat, station.lng]}
-          icon={icons[station.type]}
+          key={dealership.id}
+          position={[dealership.lat, dealership.lng]}
+          icon={icons[dealership.type]}
         >
           <Popup>
-            <strong>{station.name}</strong><br />
-            Type: {typeLabels[station.type]}<br />
-            Power: {station.power}
+            <strong>{dealership.name}</strong><br />
+            Type: {typeLabels[dealership.type]}<br />
+            Brands: {dealership.brands}
           </Popup>
         </Marker>
       ))}
@@ -871,7 +871,7 @@ export default function Map() {
 | `Marker` | Places a marker at specified latitude/longitude |
 | `Popup` | Shows information when marker is clicked |
 | `L.divIcon()` | Creates custom colored circle markers |
-| `stations.map()` | Iterates over data to create markers dynamically |
+| `dealerships.map()` | Iterates over data to create markers dynamically |
 
 ---
 
