@@ -38,6 +38,7 @@ Test that Firebase is configured correctly:
 
 ```bash
 cd backend
+source ../.venv/bin/activate
 python -c "import firebase_db; print('Firebase connected successfully!')"
 ```
 

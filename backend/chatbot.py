@@ -346,43 +346,40 @@ def recommend_cars(cars: list, criteria: UserCriteria, top_n: int = 3) -> List[d
 def format_recommendations(recommendations: List[dict], criteria: UserCriteria) -> str:
     """
     Format car recommendations into a readable response string.
+    Returns a single best recommendation rather than a ranked list.
     
     Args:
         recommendations: List of recommended cars with scores
         criteria: User's criteria (for context in response)
         
     Returns:
-        str: Formatted response message
+        str: Formatted response message with single recommendation
     """
     if not recommendations:
-        return "I could not find any cars matching your criteria. Try adjusting your budget or requirements."
+        return "I couldn't find any cars matching your criteria. Try adjusting your budget or requirements."
     
-    # Build response header based on criteria
-    header_parts = []
+    # Get the top recommendation
+    best_car = recommendations[0]
+    
+    # Build preference context
+    pref_parts = []
     if criteria.budget:
-        header_parts.append(f"budget of {int(criteria.budget):,} AED")
+        pref_parts.append(f"budget of {int(criteria.budget):,} AED")
     if criteria.min_range:
-        header_parts.append(f"{criteria.min_range} km range")
+        pref_parts.append(f"minimum {criteria.min_range} km range")
     if criteria.max_charge_time:
-        header_parts.append(f"{criteria.max_charge_time} min charging")
+        pref_parts.append(f"charging time under {criteria.max_charge_time} minutes")
     
-    if header_parts:
-        header = f"Based on your preferences ({', '.join(header_parts)}), here are my top recommendations:\n\n"
-    else:
-        header = "Here are my top car recommendations:\n\n"
+    pref_text = f" based on your {', '.join(pref_parts)}" if pref_parts else ""
     
-    # Format each car
-    car_lines = []
-    for i, car in enumerate(recommendations, 1):
-        line = (
-            f"{i}. {car['model']} ({car['year']}) - "
-            f"{int(car['price']):,} AED | "
-            f"{car['range_km']} km range | "
-            f"{car['charge_time_min']} min charge"
-        )
-        car_lines.append(line)
+    # Format the recommendation
+    response = (
+        f"I would recommend the {best_car['year']} {best_car['model']}{pref_text}. "
+        f"It's priced at {int(best_car['price']):,} AED, offers {best_car['range_km']} km of range, "
+        f"and charges in {best_car['charge_time_min']} minutes."
+    )
     
-    return header + "\n".join(car_lines)
+    return response
 
 
 def is_recommendation_request(message: str) -> bool:
